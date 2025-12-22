@@ -140,9 +140,9 @@
 **目標**: シェルコマンドを実行する
 
 **テストケース**:
-- [ ] 単純なコマンドを実行できる
-- [ ] 終了コードを正しく返す
-- [ ] 環境変数が正しく設定される
+- [x] 単純なコマンドを実行できる
+- [x] 終了コードを正しく返す
+- [x] 環境変数が正しく設定される
 
 **ファイル**:
 - `internal/executor/executor.go`
@@ -227,8 +227,8 @@
 | 3 | 3.1 WorkflowFile | ✅ 完了 |
 | 3 | 3.2 ワークフロー探索 | ✅ 完了 |
 | 3 | 3.3 Job選択 | ✅ 完了 |
-| 4 | 4.1 HostExecutor | 🔄 次に実装 |
-| 4 | 4.2 環境変数マージ | ⏳ 待機 |
+| 4 | 4.1 HostExecutor | ✅ 完了 |
+| 4 | 4.2 環境変数マージ | 🔄 次に実装 |
 | 5 | 5.1 GITHUB_ENV | ⏳ 待機 |
 | 5 | 5.2 GITHUB_PATH | ⏳ 待機 |
 | 6 | 6.1 基本CLI | ⏳ 待機 |
@@ -238,9 +238,9 @@
 
 ## 次のアクション
 
-**Iteration 4.1: HostExecutor基本実装** を実装
+**Iteration 4.2: 環境変数マージ** を実装
 
-1. `internal/executor/host_test.go` にテストを書く
+1. `internal/runtime/defaults_test.go` にテストを書く
 2. テストが失敗することを確認
-3. `internal/executor/host.go` に実装
+3. `internal/runtime/defaults.go` に実装
 4. テストが成功することを確認
