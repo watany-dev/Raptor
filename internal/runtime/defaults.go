@@ -18,3 +18,15 @@ func MergeEnv(maps ...map[string]string) map[string]string {
 
 	return result
 }
+
+// DefaultBaseEnv returns default GitHub Actions environment variables.
+// These are the base environment variables that GitHub Actions provides.
+func DefaultBaseEnv(workspacePath, sha, ref string) map[string]string {
+	return map[string]string{
+		"CI":               "true",
+		"GITHUB_ACTIONS":   "true",
+		"GITHUB_WORKSPACE": workspacePath,
+		"GITHUB_SHA":       sha,
+		"GITHUB_REF":       ref,
+	}
+}

@@ -527,3 +527,58 @@ jobs:
 		t.Error("Jobs should run in definition order (build before test)")
 	}
 }
+
+func TestRunner_Run_DefaultEnvVars(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check env
+        run: echo "test"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	_, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Check default environment variables are set
+	env := mock.calls[0].Env
+	if env["CI"] != "true" {
+		t.Errorf("CI should be 'true', got %q", env["CI"])
+	}
+	if env["GITHUB_ACTIONS"] != "true" {
+		t.Errorf("GITHUB_ACTIONS should be 'true', got %q", env["GITHUB_ACTIONS"])
+	}
+	if env["GITHUB_WORKSPACE"] == "" {
+		t.Error("GITHUB_WORKSPACE should be set")
+	}
+	// GITHUB_ENV and GITHUB_PATH should also be set
+	if env["GITHUB_ENV"] == "" {
+		t.Error("GITHUB_ENV should be set")
+	}
+	if env["GITHUB_PATH"] == "" {
+		t.Error("GITHUB_PATH should be set")
+	}
+}
