@@ -5,7 +5,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/watany-dev/raptor/internal/envfiles"
@@ -68,12 +67,8 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 		// Run specific job
 		jobIDs = []string{opts.Job}
 	} else {
-		// Run all jobs
-		for jobID := range wf.Jobs {
-			jobIDs = append(jobIDs, jobID)
-		}
-		// Sort job IDs for consistent ordering
-		sort.Strings(jobIDs)
+		// Run all jobs in definition order
+		jobIDs = wf.JobOrder
 	}
 
 	var results []*RunResult
