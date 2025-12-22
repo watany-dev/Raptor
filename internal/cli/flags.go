@@ -14,6 +14,8 @@ type RunOptions struct {
 	Job string
 	// WorkingDir is the working directory for execution.
 	WorkingDir string
+	// Isolate runs the workflow in an isolated git worktree.
+	Isolate bool
 }
 
 // ParseRunFlags parses command-line flags for the run command.
@@ -28,6 +30,8 @@ func ParseRunFlags(args []string) (*RunOptions, error) {
 	fs.StringVar(&opts.Job, "j", "", "Job ID to run (shorthand)")
 	fs.StringVar(&opts.WorkingDir, "workdir", "", "Working directory for execution")
 	fs.StringVar(&opts.WorkingDir, "C", "", "Working directory for execution (shorthand)")
+	fs.BoolVar(&opts.Isolate, "isolate", false, "Run in isolated git worktree")
+	fs.BoolVar(&opts.Isolate, "i", false, "Run in isolated git worktree (shorthand)")
 
 	if err := fs.Parse(args); err != nil {
 		return nil, err
@@ -61,9 +65,11 @@ func PrintHelp() {
 	fmt.Println("  -w, --workflow  Path to the workflow file (required)")
 	fmt.Println("  -j, --job       Job ID to run (if omitted, runs all jobs)")
 	fmt.Println("  -C, --workdir   Working directory for execution")
+	fmt.Println("  -i, --isolate   Run in isolated git worktree")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  raptor run --workflow .github/workflows/ci.yml --job build")
 	fmt.Println("  raptor run -w ci.yml -j test")
 	fmt.Println("  raptor run -w ci.yml  # Runs all jobs in the workflow")
+	fmt.Println("  raptor run -w ci.yml --isolate  # Run in isolated worktree")
 }

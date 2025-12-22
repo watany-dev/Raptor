@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,9 @@ import (
 	"github.com/watany-dev/raptor/internal/envfiles"
 	"github.com/watany-dev/raptor/internal/executor"
 	"github.com/watany-dev/raptor/internal/runtime"
+	"github.com/watany-dev/raptor/internal/util"
 	"github.com/watany-dev/raptor/internal/workflow"
+	"github.com/watany-dev/raptor/internal/worktree"
 )
 
 // Runner handles the execution of workflow jobs.
@@ -51,15 +54,33 @@ type RunResult struct {
 	StepResults []StepResult
 }
 
+// runContext holds the context for a workflow run.
+type runContext struct {
+	workDir   string
+	repoRoot  string
+	sha       string
+	ref       string
+	workspace *worktree.Workspace
+}
+
 // Run executes workflow job(s) with the given options.
 // If opts.Job is specified, only that job is executed.
 // If opts.Job is empty, all jobs in the workflow are executed.
 func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
+	ctx := context.Background()
+
 	// Load the workflow file
 	wf, err := workflow.LoadWorkflowFile(opts.Workflow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow: %w", err)
 	}
+
+	// Setup run context (worktree if isolate mode, or working directory otherwise)
+	runCtx, cleanup, err := r.setupRunContext(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 
 	// Determine which jobs to run
 	var jobIDs []string
@@ -73,7 +94,7 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 
 	var results []*RunResult
 	for _, jobID := range jobIDs {
-		result, err := r.runJob(wf, jobID, opts)
+		result, err := r.runJob(wf, jobID, opts, runCtx)
 		if err != nil {
 			return results, err
 		}
@@ -87,8 +108,60 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	return results, nil
 }
 
+// setupRunContext sets up the execution context.
+// If isolate mode is enabled, it creates a git worktree for isolated execution.
+// Returns a cleanup function that should be called when execution is complete.
+func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runContext, func(), error) {
+	noopCleanup := func() {}
+
+	if !opts.Isolate {
+		// Non-isolated mode: run directly in the working directory
+		sha, _ := util.GitHeadSHA(ctx, opts.WorkingDir)
+		ref, _ := util.GitHeadRef(ctx, opts.WorkingDir)
+		return &runContext{
+			workDir:  opts.WorkingDir,
+			repoRoot: opts.WorkingDir,
+			sha:      sha,
+			ref:      ref,
+		}, noopCleanup, nil
+	}
+
+	// Isolated mode: create a git worktree
+	repoRoot, err := util.FindGitRoot(ctx, opts.WorkingDir)
+	if err != nil {
+		return nil, noopCleanup, fmt.Errorf("failed to find git root: %w", err)
+	}
+
+	ws, err := worktree.CreateWorkspace(ctx, repoRoot)
+	if err != nil {
+		return nil, noopCleanup, fmt.Errorf("failed to create workspace: %w", err)
+	}
+
+	fmt.Fprintf(r.stdout, "Created isolated workspace: %s\n", ws.Path)
+
+	// Get git info from original repo
+	sha, _ := util.GitHeadSHA(ctx, repoRoot)
+	ref, _ := util.GitHeadRef(ctx, repoRoot)
+
+	cleanup := func() {
+		if err := worktree.RemoveWorkspace(ctx, ws); err != nil {
+			fmt.Fprintf(r.stderr, "Warning: failed to remove workspace: %v\n", err)
+		} else {
+			fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
+		}
+	}
+
+	return &runContext{
+		workDir:   ws.Path,
+		repoRoot:  repoRoot,
+		sha:       sha,
+		ref:       ref,
+		workspace: ws,
+	}, cleanup, nil
+}
+
 // runJob executes a single job from the workflow.
-func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOptions) (*RunResult, error) {
+func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOptions, runCtx *runContext) (*RunResult, error) {
 	// Select the job
 	job, err := workflow.SelectJob(wf, jobID)
 	if err != nil {
@@ -113,8 +186,9 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 	envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
 	pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
 
-	// Initialize environment with workflow-level env
-	accumulatedEnv := runtime.MergeEnv(wf.Env, job.Env)
+	// Initialize environment with default GitHub Actions env, then workflow-level env
+	defaultEnv := runtime.DefaultBaseEnv(runCtx.workDir, runCtx.sha, runCtx.ref)
+	accumulatedEnv := runtime.MergeEnv(defaultEnv, wf.Env, job.Env)
 
 	// Add GITHUB_ENV and GITHUB_PATH paths to env
 	accumulatedEnv["GITHUB_ENV"] = envFilePath
@@ -132,13 +206,13 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 		// Merge step-level env
 		stepEnv := runtime.MergeEnv(accumulatedEnv, step.Env)
 
-		// Determine working directory
-		workDir := opts.WorkingDir
+		// Determine working directory (use runCtx.workDir as base)
+		workDir := runCtx.workDir
 		if step.WorkingDirectory != "" {
 			if filepath.IsAbs(step.WorkingDirectory) {
 				workDir = step.WorkingDirectory
 			} else {
-				workDir = filepath.Join(opts.WorkingDir, step.WorkingDirectory)
+				workDir = filepath.Join(runCtx.workDir, step.WorkingDirectory)
 			}
 		}
 
