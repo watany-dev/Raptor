@@ -1,6 +1,6 @@
 # 開発環境準備計画
 
-このドキュメントは `docs/impl/overview.md` を元に、garl プロジェクトの開発環境準備手順をまとめたものです。
+このドキュメントは `docs/impl/overview.md` を元に、Raptor プロジェクトの開発環境準備手順をまとめたものです。
 
 ---
 
@@ -41,8 +41,8 @@
 以下のディレクトリ構造を作成する必要があります:
 
 ```
-garl/
-├── cmd/garl/
+raptor/
+├── cmd/raptor/
 │   └── main.go
 ├── internal/
 │   ├── cli/
@@ -80,9 +80,9 @@ garl/
 ### 2.2 セットアップスクリプト
 ```bash
 # プロジェクトルートで実行
-mkdir -p garl/cmd/garl
-mkdir -p garl/internal/{cli,worktree,workflow,runtime,envfiles,executor,util}
-mkdir -p garl/testdata
+mkdir -p raptor/cmd/raptor
+mkdir -p raptor/internal/{cli,worktree,workflow,runtime,envfiles,executor,util}
+mkdir -p raptor/testdata
 ```
 
 ---
@@ -91,8 +91,8 @@ mkdir -p garl/testdata
 
 ### 3.1 go.mod の作成
 ```bash
-cd garl
-go mod init github.com/watany-dev/Raptor/garl
+cd raptor
+go mod init github.com/watany-dev/Raptor/raptor
 ```
 
 ### 3.2 必須依存パッケージ
@@ -168,7 +168,7 @@ go tool cover -html=coverage.out
 overview.md で定義された実装順序:
 
 1. **CLI + リポジトリ検出のスキャフォールド**
-   - `garl run --workflow --job`
+   - `raptor run --workflow --job`
    - `FindGitRoot`
 
 2. **Worktreeワークスペースライフサイクル**
@@ -217,12 +217,12 @@ go version        # 1.22+ を確認
 git --version     # 2.5+ を確認
 
 # 3. プロジェクト構造の作成
-mkdir -p garl/cmd/garl
-mkdir -p garl/internal/{cli,worktree,workflow,runtime,envfiles,executor,util}
+mkdir -p raptor/cmd/raptor
+mkdir -p raptor/internal/{cli,worktree,workflow,runtime,envfiles,executor,util}
 
 # 4. Go モジュールの初期化
-cd garl
-go mod init github.com/watany-dev/Raptor/garl
+cd raptor
+go mod init github.com/watany-dev/Raptor/raptor
 go get gopkg.in/yaml.v3@v3.0.1
 
 # 5. ビルド確認 (初期ファイル作成後)
