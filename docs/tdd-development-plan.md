@@ -153,8 +153,8 @@
 **目標**: workflow → job → step の順でenvをマージ
 
 **テストケース**:
-- [ ] 複数のmapが正しくマージされる
-- [ ] 後のmapが前のmapを上書きする
+- [x] 複数のmapが正しくマージされる
+- [x] 後のmapが前のmapを上書きする
 
 **ファイル**:
 - `internal/runtime/defaults.go`
@@ -228,8 +228,8 @@
 | 3 | 3.2 ワークフロー探索 | ✅ 完了 |
 | 3 | 3.3 Job選択 | ✅ 完了 |
 | 4 | 4.1 HostExecutor | ✅ 完了 |
-| 4 | 4.2 環境変数マージ | 🔄 次に実装 |
-| 5 | 5.1 GITHUB_ENV | ⏳ 待機 |
+| 4 | 4.2 環境変数マージ | ✅ 完了 |
+| 5 | 5.1 GITHUB_ENV | 🔄 次に実装 |
 | 5 | 5.2 GITHUB_PATH | ⏳ 待機 |
 | 6 | 6.1 基本CLI | ⏳ 待機 |
 | 6 | 6.2 ジョブ実行ループ | ⏳ 待機 |
@@ -238,9 +238,9 @@
 
 ## 次のアクション
 
-**Iteration 4.2: 環境変数マージ** を実装
+**Iteration 5.1: GITHUB_ENVパース** を実装
 
-1. `internal/runtime/defaults_test.go` にテストを書く
+1. `internal/envfiles/parse_test.go` にテストを書く
 2. テストが失敗することを確認
-3. `internal/runtime/defaults.go` に実装
+3. `internal/envfiles/parse.go` に実装
 4. テストが成功することを確認
