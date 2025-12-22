@@ -51,9 +51,9 @@
 **目標**: 隔離されたワークスペースを作成する
 
 **テストケース**:
-- [ ] 新しいworktreeを作成できる
-- [ ] ワークスペースIDがユニークである
-- [ ] 作成されたworktreeが正しいパスにある
+- [x] 新しいworktreeを作成できる
+- [x] ワークスペースIDがユニークである
+- [x] 作成されたworktreeが正しいパスにある
 
 **ファイル**:
 - `internal/worktree/types.go`
@@ -64,8 +64,8 @@
 **目標**: ワークスペースをクリーンアップする
 
 **テストケース**:
-- [ ] worktreeを正常に削除できる
-- [ ] 削除後、ディレクトリが存在しない
+- [x] worktreeを正常に削除できる
+- [x] 削除後、ディレクトリが存在しない
 
 **ファイル**:
 - `internal/worktree/worktree.go`
@@ -200,9 +200,9 @@
 |-------|-----------|------|
 | 1 | 1.1 FindGitRoot | ✅ 完了 |
 | 1 | 1.2 GitHeadSHA/Ref | ✅ 完了 |
-| 2 | 2.1 CreateWorkspace | 🔄 次に実装 |
-| 2 | 2.2 RemoveWorkspace | ⏳ 待機 |
-| 3 | 3.1 WorkflowFile | ⏳ 待機 |
+| 2 | 2.1 CreateWorkspace | ✅ 完了 |
+| 2 | 2.2 RemoveWorkspace | ✅ 完了 |
+| 3 | 3.1 WorkflowFile | 🔄 次に実装 |
 | 3 | 3.2 ワークフロー探索 | ⏳ 待機 |
 | 3 | 3.3 Job選択 | ⏳ 待機 |
 | 4 | 4.1 HostExecutor | ⏳ 待機 |
@@ -216,10 +216,10 @@
 
 ## 次のアクション
 
-**Iteration 2.1: CreateWorkspace** から開始
+**Iteration 3.1: WorkflowFile型定義とYAMLロード** を実装
 
-1. `internal/worktree/types.go` に型定義を作成
-2. `internal/worktree/worktree_test.go` にテストを書く
+1. `internal/workflow/model.go` に型定義を作成
+2. `internal/workflow/load_test.go` にテストを書く
 3. テストが失敗することを確認
-4. `internal/worktree/worktree.go` に実装
+4. `internal/workflow/load.go` に実装
 5. テストが成功することを確認
