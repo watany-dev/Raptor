@@ -51,22 +51,54 @@ type RunResult struct {
 	StepResults []StepResult
 }
 
-// Run executes a workflow job with the given options.
-func (r *Runner) Run(opts *RunOptions) (*RunResult, error) {
+// Run executes workflow job(s) with the given options.
+// If opts.Job is specified, only that job is executed.
+// If opts.Job is empty, all jobs in the workflow are executed.
+func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	// Load the workflow file
 	wf, err := workflow.LoadWorkflowFile(opts.Workflow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow: %w", err)
 	}
 
+	// Determine which jobs to run
+	var jobIDs []string
+	if opts.Job != "" {
+		// Run specific job
+		jobIDs = []string{opts.Job}
+	} else {
+		// Run all jobs in definition order
+		jobIDs = wf.JobOrder
+	}
+
+	var results []*RunResult
+	for _, jobID := range jobIDs {
+		result, err := r.runJob(wf, jobID, opts)
+		if err != nil {
+			return results, err
+		}
+		results = append(results, result)
+		if !result.Success {
+			// Stop on first failure
+			return results, nil
+		}
+	}
+
+	return results, nil
+}
+
+// runJob executes a single job from the workflow.
+func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOptions) (*RunResult, error) {
 	// Select the job
-	job, err := workflow.SelectJob(wf, opts.Job)
+	job, err := workflow.SelectJob(wf, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to select job: %w", err)
 	}
 
+	fmt.Fprintf(r.stdout, "=== Running job: %s ===\n", jobID)
+
 	result := &RunResult{
-		JobID:       opts.Job,
+		JobID:       jobID,
 		Success:     true,
 		StepResults: make([]StepResult, 0, len(job.Steps)),
 	}

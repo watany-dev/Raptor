@@ -66,7 +66,7 @@ jobs:
 	stderr := &bytes.Buffer{}
 	runner.SetOutput(stdout, stderr)
 
-	result, err := runner.Run(&RunOptions{
+	results, err := runner.Run(&RunOptions{
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
@@ -80,6 +80,12 @@ jobs:
 	if len(mock.calls) != 3 {
 		t.Errorf("Expected 3 step executions, got %d", len(mock.calls))
 	}
+
+	// Verify single job result
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 job result, got %d", len(results))
+	}
+	result := results[0]
 
 	// Verify all steps completed successfully
 	if !result.Success {
@@ -121,7 +127,7 @@ jobs:
 	stderr := &bytes.Buffer{}
 	runner.SetOutput(stdout, stderr)
 
-	result, err := runner.Run(&RunOptions{
+	results, err := runner.Run(&RunOptions{
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
@@ -130,6 +136,12 @@ jobs:
 	if err != nil {
 		t.Fatalf("Run() error = %v", err)
 	}
+
+	// Verify single job result
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 job result, got %d", len(results))
+	}
+	result := results[0]
 
 	// Verify job failed
 	if result.Success {
@@ -437,5 +449,81 @@ jobs:
 
 	if err == nil {
 		t.Error("Expected error for invalid job ID")
+	}
+}
+
+func TestRunner_Run_AllJobs(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build
+        run: echo "building"
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test
+        run: echo "testing"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0, Stdout: "building\n"},
+		executor.Result{ExitCode: 0, Stdout: "testing\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	// Run with empty Job to run all jobs
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "", // Empty means all jobs
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Verify both jobs were executed
+	if len(results) != 2 {
+		t.Errorf("Expected 2 job results, got %d", len(results))
+	}
+
+	// Verify all steps were executed (1 per job)
+	if len(mock.calls) != 2 {
+		t.Errorf("Expected 2 step executions, got %d", len(mock.calls))
+	}
+
+	// Verify both jobs succeeded
+	for _, result := range results {
+		if !result.Success {
+			t.Errorf("Job %s should have succeeded", result.JobID)
+		}
+	}
+
+	// Verify job names are present (in definition order)
+	output := stdout.String()
+	if !strings.Contains(output, "=== Running job: build ===") {
+		t.Error("Output should contain build job header")
+	}
+	if !strings.Contains(output, "=== Running job: test ===") {
+		t.Error("Output should contain test job header")
+	}
+
+	// Verify definition order (build before test)
+	buildIdx := strings.Index(output, "=== Running job: build ===")
+	testIdx := strings.Index(output, "=== Running job: test ===")
+	if buildIdx > testIdx {
+		t.Error("Jobs should run in definition order (build before test)")
 	}
 }

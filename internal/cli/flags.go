@@ -24,7 +24,7 @@ func ParseRunFlags(args []string) (*RunOptions, error) {
 	opts := &RunOptions{}
 	fs.StringVar(&opts.Workflow, "workflow", "", "Path to the workflow file (required)")
 	fs.StringVar(&opts.Workflow, "w", "", "Path to the workflow file (shorthand)")
-	fs.StringVar(&opts.Job, "job", "", "Job ID to run (required)")
+	fs.StringVar(&opts.Job, "job", "", "Job ID to run (if omitted, runs all jobs)")
 	fs.StringVar(&opts.Job, "j", "", "Job ID to run (shorthand)")
 	fs.StringVar(&opts.WorkingDir, "workdir", "", "Working directory for execution")
 	fs.StringVar(&opts.WorkingDir, "C", "", "Working directory for execution (shorthand)")
@@ -36,9 +36,6 @@ func ParseRunFlags(args []string) (*RunOptions, error) {
 	// Validate required fields
 	if opts.Workflow == "" {
 		return nil, fmt.Errorf("--workflow flag is required")
-	}
-	if opts.Job == "" {
-		return nil, fmt.Errorf("--job flag is required")
 	}
 
 	// Set default working directory
@@ -62,10 +59,11 @@ func PrintHelp() {
 	fmt.Println()
 	fmt.Println("Run options:")
 	fmt.Println("  -w, --workflow  Path to the workflow file (required)")
-	fmt.Println("  -j, --job       Job ID to run (required)")
+	fmt.Println("  -j, --job       Job ID to run (if omitted, runs all jobs)")
 	fmt.Println("  -C, --workdir   Working directory for execution")
 	fmt.Println()
 	fmt.Println("Examples:")
 	fmt.Println("  raptor run --workflow .github/workflows/ci.yml --job build")
 	fmt.Println("  raptor run -w ci.yml -j test")
+	fmt.Println("  raptor run -w ci.yml  # Runs all jobs in the workflow")
 }

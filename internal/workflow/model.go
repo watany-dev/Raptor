@@ -8,6 +8,8 @@ type WorkflowFile struct {
 	Env map[string]string `yaml:"env"`
 	// Jobs contains the jobs defined in the workflow.
 	Jobs map[string]Job `yaml:"jobs"`
+	// JobOrder contains job IDs in the order they are defined in the YAML file.
+	JobOrder []string `yaml:"-"`
 }
 
 // Job represents a job in a workflow.

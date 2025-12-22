@@ -45,20 +45,27 @@ func runCommand(args []string) error {
 	}
 
 	runner := cli.NewRunner(executor.NewHostExecutor())
-	result, err := runner.Run(opts)
+	results, err := runner.Run(opts)
 	if err != nil {
 		return err
 	}
 
-	if !result.Success {
-		// Find the failed step
-		for _, stepResult := range result.StepResults {
-			if stepResult.ExitCode != 0 {
-				return fmt.Errorf("job failed at step %q with exit code %d", stepResult.StepName, stepResult.ExitCode)
+	// Check for failures in any job
+	for _, result := range results {
+		if !result.Success {
+			// Find the failed step
+			for _, stepResult := range result.StepResults {
+				if stepResult.ExitCode != 0 {
+					return fmt.Errorf("job %q failed at step %q with exit code %d", result.JobID, stepResult.StepName, stepResult.ExitCode)
+				}
 			}
 		}
 	}
 
-	fmt.Println("Job completed successfully")
+	if len(results) == 1 {
+		fmt.Println("Job completed successfully")
+	} else {
+		fmt.Printf("All %d jobs completed successfully\n", len(results))
+	}
 	return nil
 }
