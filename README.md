@@ -40,7 +40,11 @@ sudo mv raptor /usr/local/bin/
 ### 基本的な使用方法
 
 ```bash
+# 特定のジョブを実行
 raptor run --workflow <ワークフローファイル> --job <ジョブID>
+
+# 全ジョブを実行 (--job省略時)
+raptor run --workflow <ワークフローファイル>
 ```
 
 ### コマンドオプション
@@ -48,7 +52,7 @@ raptor run --workflow <ワークフローファイル> --job <ジョブID>
 | オプション | 短縮形 | 説明 |
 |------------|--------|------|
 | `--workflow` | `-w` | ワークフローファイルへのパス (必須) |
-| `--job` | `-j` | 実行するジョブID (必須) |
+| `--job` | `-j` | 実行するジョブID (省略時は全ジョブ実行) |
 | `--workdir` | `-C` | 作業ディレクトリ (デフォルト: カレントディレクトリ) |
 
 ### 使用例
@@ -59,6 +63,9 @@ raptor run --workflow .github/workflows/ci.yml --job build
 
 # 短縮形で指定
 raptor run -w ci.yml -j test
+
+# ワークフロー内の全ジョブを実行
+raptor run -w ci.yml
 
 # 作業ディレクトリを指定して実行
 raptor run -w .github/workflows/ci.yml -j lint -C /path/to/project

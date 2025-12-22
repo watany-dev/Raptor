@@ -83,11 +83,6 @@ func TestParseRunFlags_MissingRequired(t *testing.T) {
 			wantErr: "--workflow flag is required",
 		},
 		{
-			name:    "missing job",
-			args:    []string{"--workflow", "ci.yml"},
-			wantErr: "--job flag is required",
-		},
-		{
 			name:    "both missing",
 			args:    []string{},
 			wantErr: "--workflow flag is required",
@@ -104,6 +99,20 @@ func TestParseRunFlags_MissingRequired(t *testing.T) {
 				t.Errorf("error = %v, want %v", err.Error(), tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestParseRunFlags_OptionalJob(t *testing.T) {
+	// Job is optional - when omitted, all jobs should run
+	opts, err := ParseRunFlags([]string{"--workflow", "ci.yml"})
+	if err != nil {
+		t.Fatalf("ParseRunFlags() error = %v", err)
+	}
+	if opts.Job != "" {
+		t.Errorf("Job = %v, want empty string", opts.Job)
+	}
+	if opts.Workflow != "ci.yml" {
+		t.Errorf("Workflow = %v, want ci.yml", opts.Workflow)
 	}
 }
 
