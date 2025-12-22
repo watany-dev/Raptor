@@ -48,13 +48,13 @@ func TestCreateWorkspace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create first workspace: %v", err)
 		}
-		defer RemoveWorkspace(ctx, ws1)
+		defer func() { _ = RemoveWorkspace(ctx, ws1) }()
 
 		ws2, err := CreateWorkspace(ctx, repoRoot)
 		if err != nil {
 			t.Fatalf("failed to create second workspace: %v", err)
 		}
-		defer RemoveWorkspace(ctx, ws2)
+		defer func() { _ = RemoveWorkspace(ctx, ws2) }()
 
 		if ws1.ID == ws2.ID {
 			t.Errorf("workspace IDs should be unique, both got: %s", ws1.ID)
@@ -70,7 +70,7 @@ func TestCreateWorkspace(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
-		defer RemoveWorkspace(ctx, ws)
+		defer func() { _ = RemoveWorkspace(ctx, ws) }()
 
 		// Verify path is under .raptor directory
 		expectedPrefix := filepath.Join(repoRoot, ".raptor", "ws-")

@@ -82,7 +82,7 @@ func RemoveWorkspace(ctx context.Context, ws *Workspace) error {
 		// Prune the worktree reference
 		pruneCmd := exec.CommandContext(ctx, "git", "worktree", "prune")
 		pruneCmd.Dir = ws.RepoRoot
-		pruneCmd.Run() // Ignore prune errors
+		_ = pruneCmd.Run() // Ignore prune errors
 	}
 
 	return nil
