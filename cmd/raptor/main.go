@@ -8,6 +8,12 @@ import (
 	"github.com/watany-dev/raptor/internal/executor"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -31,7 +37,7 @@ func run(args []string) error {
 		cli.PrintHelp()
 		return nil
 	case "version", "-v", "--version":
-		fmt.Println("raptor version 0.1.0")
+		fmt.Printf("raptor %s (commit: %s, built: %s)\n", version, commit, date)
 		return nil
 	default:
 		return fmt.Errorf("unknown command: %s", command)

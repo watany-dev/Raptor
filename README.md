@@ -16,6 +16,38 @@ Raptorは、GitHub Actionsのワークフローファイル (`.github/workflows/
 
 ## インストール
 
+### バイナリをダウンロード（推奨）
+
+[リリースページ](https://github.com/watany-dev/raptor/releases)から、お使いのプラットフォームに合ったバイナリをダウンロードしてください。
+
+#### Linux / macOS
+
+```bash
+# バイナリをダウンロード（例: Linux x86_64）
+curl -LO https://github.com/watany-dev/raptor/releases/latest/download/raptor_<VERSION>_Linux_x86_64.tar.gz
+
+# 解凍
+tar xzf raptor_<VERSION>_Linux_x86_64.tar.gz
+
+# 実行可能パスに移動
+sudo mv raptor /usr/local/bin/
+
+# 動作確認
+raptor --version
+```
+
+#### Windows
+
+1. [リリースページ](https://github.com/watany-dev/raptor/releases)から `raptor_<VERSION>_Windows_x86_64.zip` をダウンロード
+2. ZIPファイルを解凍
+3. `raptor.exe` をPATHの通ったディレクトリに配置
+
+### Go installを使用
+
+```bash
+go install github.com/watany-dev/raptor/cmd/raptor@latest
+```
+
 ### ソースからビルド
 
 ```bash
@@ -32,8 +64,8 @@ sudo mv raptor /usr/local/bin/
 
 ### 必要要件
 
-- Go 1.22 以上
-- Git 2.5 以上
+- ランタイム: Git 2.5 以上
+- ソースビルド時のみ: Go 1.22 以上
 
 ## 使い方
 
