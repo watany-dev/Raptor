@@ -168,8 +168,8 @@
 **目標**: GITHUB_ENVファイルをパースして環境変数に反映
 
 **テストケース**:
-- [ ] KEY=VALUE形式をパースできる
-- [ ] マルチラインデリミタ形式をパースできる
+- [x] KEY=VALUE形式をパースできる
+- [x] マルチラインデリミタ形式をパースできる
 
 **ファイル**:
 - `internal/envfiles/parse.go`
@@ -179,8 +179,8 @@
 **目標**: GITHUB_PATHファイルをパースしてPATHに追加
 
 **テストケース**:
-- [ ] 複数行のパスを読み込める
-- [ ] PATHの先頭に追加される
+- [x] 複数行のパスを読み込める
+- [x] PATHの先頭に追加される
 
 **ファイル**:
 - `internal/envfiles/parse.go`
@@ -229,18 +229,18 @@
 | 3 | 3.3 Job選択 | ✅ 完了 |
 | 4 | 4.1 HostExecutor | ✅ 完了 |
 | 4 | 4.2 環境変数マージ | ✅ 完了 |
-| 5 | 5.1 GITHUB_ENV | 🔄 次に実装 |
-| 5 | 5.2 GITHUB_PATH | ⏳ 待機 |
-| 6 | 6.1 基本CLI | ⏳ 待機 |
+| 5 | 5.1 GITHUB_ENV | ✅ 完了 |
+| 5 | 5.2 GITHUB_PATH | ✅ 完了 |
+| 6 | 6.1 基本CLI | 🔄 次に実装 |
 | 6 | 6.2 ジョブ実行ループ | ⏳ 待機 |
 
 ---
 
 ## 次のアクション
 
-**Iteration 5.1: GITHUB_ENVパース** を実装
+**Iteration 6.1: 基本CLI** を実装
 
-1. `internal/envfiles/parse_test.go` にテストを書く
-2. テストが失敗することを確認
-3. `internal/envfiles/parse.go` に実装
-4. テストが成功することを確認
+1. `cmd/raptor/main.go` を作成
+2. `internal/cli/flags.go` と `internal/cli/run.go` にテストを書く
+3. テストが失敗することを確認
+4. 実装してテストが成功することを確認
