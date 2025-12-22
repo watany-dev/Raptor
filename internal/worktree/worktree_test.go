@@ -92,6 +92,56 @@ func TestCreateWorkspace(t *testing.T) {
 	})
 }
 
+func TestRemoveWorkspace(t *testing.T) {
+	ctx := context.Background()
+	repoRoot := findTestRepoRoot(t)
+
+	t.Run("removes worktree successfully", func(t *testing.T) {
+		ws, err := CreateWorkspace(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("failed to create workspace: %v", err)
+		}
+
+		// Verify workspace exists before removal
+		if _, err := os.Stat(ws.Path); os.IsNotExist(err) {
+			t.Fatalf("workspace should exist before removal: %s", ws.Path)
+		}
+
+		// Remove the workspace
+		err = RemoveWorkspace(ctx, ws)
+		if err != nil {
+			t.Errorf("expected no error, got: %v", err)
+		}
+	})
+
+	t.Run("directory does not exist after removal", func(t *testing.T) {
+		ws, err := CreateWorkspace(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("failed to create workspace: %v", err)
+		}
+
+		wsPath := ws.Path
+
+		// Remove the workspace
+		err = RemoveWorkspace(ctx, ws)
+		if err != nil {
+			t.Fatalf("failed to remove workspace: %v", err)
+		}
+
+		// Verify directory no longer exists
+		if _, err := os.Stat(wsPath); !os.IsNotExist(err) {
+			t.Errorf("workspace directory should not exist after removal: %s", wsPath)
+		}
+	})
+
+	t.Run("handles nil workspace gracefully", func(t *testing.T) {
+		err := RemoveWorkspace(ctx, nil)
+		if err != nil {
+			t.Errorf("expected no error for nil workspace, got: %v", err)
+		}
+	})
+}
+
 // findTestRepoRoot finds the repository root by looking for .git directory
 func findTestRepoRoot(t *testing.T) string {
 	t.Helper()
