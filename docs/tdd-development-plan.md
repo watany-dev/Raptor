@@ -51,9 +51,9 @@
 **目標**: 隔離されたワークスペースを作成する
 
 **テストケース**:
-- [ ] 新しいworktreeを作成できる
-- [ ] ワークスペースIDがユニークである
-- [ ] 作成されたworktreeが正しいパスにある
+- [x] 新しいworktreeを作成できる
+- [x] ワークスペースIDがユニークである
+- [x] 作成されたworktreeが正しいパスにある
 
 **ファイル**:
 - `internal/worktree/types.go`
@@ -200,8 +200,8 @@
 |-------|-----------|------|
 | 1 | 1.1 FindGitRoot | ✅ 完了 |
 | 1 | 1.2 GitHeadSHA/Ref | ✅ 完了 |
-| 2 | 2.1 CreateWorkspace | 🔄 次に実装 |
-| 2 | 2.2 RemoveWorkspace | ⏳ 待機 |
+| 2 | 2.1 CreateWorkspace | ✅ 完了 |
+| 2 | 2.2 RemoveWorkspace | 🔄 次に実装 |
 | 3 | 3.1 WorkflowFile | ⏳ 待機 |
 | 3 | 3.2 ワークフロー探索 | ⏳ 待機 |
 | 3 | 3.3 Job選択 | ⏳ 待機 |
@@ -216,10 +216,11 @@
 
 ## 次のアクション
 
-**Iteration 2.1: CreateWorkspace** から開始
+**Iteration 2.2: RemoveWorkspace** を実装
 
-1. `internal/worktree/types.go` に型定義を作成
-2. `internal/worktree/worktree_test.go` にテストを書く
-3. テストが失敗することを確認
-4. `internal/worktree/worktree.go` に実装
-5. テストが成功することを確認
+1. `internal/worktree/worktree_test.go` にRemoveWorkspaceのテストを追加
+2. テストが失敗することを確認
+3. `internal/worktree/worktree.go` にRemoveWorkspaceを実装（既に実装済み）
+4. テストが成功することを確認
+
+> Note: RemoveWorkspaceは2.1で既に実装されているため、テスト追加のみで完了する可能性があります。
