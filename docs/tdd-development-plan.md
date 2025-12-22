@@ -12,6 +12,28 @@
 2. **Green**: 最小限の実装でテストを通す
 3. **Refactor**: コードを改善する
 
+### Tidy First? (Kent Beck)
+機能変更の前に、まずコードを整理（tidy）するかを検討します:
+
+**原則**:
+- **構造的変更と機能的変更を分離する**: tidyingは別コミットで行う
+- **小さく整理してから変更する**: 大きなリファクタリングより、小さな整理を積み重ねる
+- **読みやすさを優先**: 次の開発者（未来の自分を含む）のために整理する
+
+**Tidying パターン**:
+1. **Guard Clauses**: ネストを減らすために早期リターンを使う
+2. **Dead Code**: 使われていないコードを削除
+3. **Normalize Symmetries**: 似た処理は同じ形式で書く
+4. **Extract Helper**: 再利用可能な部分を関数に抽出
+5. **One Pile**: 散らばった関連コードを一箇所にまとめる
+6. **Explaining Comments**: 理解しにくい箇所にコメントを追加
+7. **Explaining Variables**: 複雑な式を説明的な変数に分解
+
+**タイミング**:
+- 変更対象のコードが読みにくい → Tidy First
+- 変更が簡単にできる状態 → そのまま実装
+- Tidyingのコストが高すぎる → 機能変更後に検討
+
 ### イテレーション単位
 機能を最小単位に分割し、各イテレーションで1つの機能を完成させます。
 
@@ -79,9 +101,9 @@
 **目標**: ワークフローYAMLをパースする
 
 **テストケース**:
-- [ ] 有効なYAMLをパースできる
-- [ ] name, env, jobsが正しく読み込まれる
-- [ ] 無効なYAMLでエラーを返す
+- [x] 有効なYAMLをパースできる
+- [x] name, env, jobsが正しく読み込まれる
+- [x] 無効なYAMLでエラーを返す
 
 **ファイル**:
 - `internal/workflow/model.go`
@@ -202,8 +224,8 @@
 | 1 | 1.2 GitHeadSHA/Ref | ✅ 完了 |
 | 2 | 2.1 CreateWorkspace | ✅ 完了 |
 | 2 | 2.2 RemoveWorkspace | ✅ 完了 |
-| 3 | 3.1 WorkflowFile | 🔄 次に実装 |
-| 3 | 3.2 ワークフロー探索 | ⏳ 待機 |
+| 3 | 3.1 WorkflowFile | ✅ 完了 |
+| 3 | 3.2 ワークフロー探索 | 🔄 次に実装 |
 | 3 | 3.3 Job選択 | ⏳ 待機 |
 | 4 | 4.1 HostExecutor | ⏳ 待機 |
 | 4 | 4.2 環境変数マージ | ⏳ 待機 |
@@ -216,10 +238,9 @@
 
 ## 次のアクション
 
-**Iteration 3.1: WorkflowFile型定義とYAMLロード** を実装
+**Iteration 3.2: ワークフロー探索** を実装
 
-1. `internal/workflow/model.go` に型定義を作成
-2. `internal/workflow/load_test.go` にテストを書く
-3. テストが失敗することを確認
-4. `internal/workflow/load.go` に実装
-5. テストが成功することを確認
+1. `internal/workflow/select_test.go` にテストを書く
+2. テストが失敗することを確認
+3. `internal/workflow/select.go` に実装
+4. テストが成功することを確認
