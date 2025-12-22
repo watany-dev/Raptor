@@ -46,16 +46,19 @@ func ParseEnvFile(path string) (map[string]string, error) {
 				return nil, fmt.Errorf("invalid environment variable in %s: %w", path, err)
 			}
 
-			// Read lines until we hit the delimiter
-			var valueLines []string
+			// Read lines until we hit the delimiter using strings.Builder for efficiency
+			var sb strings.Builder
 			for scanner.Scan() {
 				valueLine := scanner.Text()
 				if valueLine == delimiter {
 					break
 				}
-				valueLines = append(valueLines, valueLine)
+				if sb.Len() > 0 {
+					sb.WriteByte('\n')
+				}
+				sb.WriteString(valueLine)
 			}
-			value := strings.Join(valueLines, "\n")
+			value := sb.String()
 
 			// Validate value for security
 			if err := security.ValidateEnvVarValue(key, value); err != nil {

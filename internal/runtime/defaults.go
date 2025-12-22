@@ -5,7 +5,13 @@ package runtime
 // This is used to merge environment variables in the order:
 // workflow -> job -> step
 func MergeEnv(maps ...map[string]string) map[string]string {
-	result := make(map[string]string)
+	// Pre-calculate total size for efficient allocation
+	totalSize := 0
+	for _, m := range maps {
+		totalSize += len(m)
+	}
+
+	result := make(map[string]string, totalSize)
 
 	for _, m := range maps {
 		if m == nil {
