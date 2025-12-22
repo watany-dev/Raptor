@@ -11,6 +11,7 @@ import (
 	"github.com/watany-dev/raptor/internal/envfiles"
 	"github.com/watany-dev/raptor/internal/executor"
 	"github.com/watany-dev/raptor/internal/runtime"
+	"github.com/watany-dev/raptor/internal/security"
 	"github.com/watany-dev/raptor/internal/util"
 	"github.com/watany-dev/raptor/internal/workflow"
 	"github.com/watany-dev/raptor/internal/worktree"
@@ -67,6 +68,9 @@ type runContext struct {
 // If opts.Job is specified, only that job is executed.
 // If opts.Job is empty, all jobs in the workflow are executed.
 func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
+	// Print security warning
+	r.printSecurityWarning(opts)
+
 	ctx := context.Background()
 
 	// Load the workflow file
@@ -109,27 +113,20 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 }
 
 // setupRunContext sets up the execution context.
-// If isolate mode is enabled, it creates a git worktree for isolated execution.
+// All workflows run in isolated git worktrees for security.
 // Returns a cleanup function that should be called when execution is complete.
 func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runContext, func(), error) {
 	noopCleanup := func() {}
 
-	if !opts.Isolate {
-		// Non-isolated mode: run directly in the working directory
-		sha, _ := util.GitHeadSHA(ctx, opts.WorkingDir)
-		ref, _ := util.GitHeadRef(ctx, opts.WorkingDir)
-		return &runContext{
-			workDir:  opts.WorkingDir,
-			repoRoot: opts.WorkingDir,
-			sha:      sha,
-			ref:      ref,
-		}, noopCleanup, nil
-	}
-
-	// Isolated mode: create a git worktree
+	// All workflows run in isolated git worktrees for security
 	repoRoot, err := util.FindGitRoot(ctx, opts.WorkingDir)
 	if err != nil {
-		return nil, noopCleanup, fmt.Errorf("failed to find git root: %w", err)
+		return nil, noopCleanup, fmt.Errorf(
+			"not a git repository: %w\n"+
+				"Raptor requires a git repository for secure isolated execution.\n"+
+				"Initialize with: git init",
+			err,
+		)
 	}
 
 	ws, err := worktree.CreateWorkspace(ctx, repoRoot)
@@ -206,14 +203,15 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 		// Merge step-level env
 		stepEnv := runtime.MergeEnv(accumulatedEnv, step.Env)
 
-		// Determine working directory (use runCtx.workDir as base)
+		// Validate and determine working directory
 		workDir := runCtx.workDir
 		if step.WorkingDirectory != "" {
-			if filepath.IsAbs(step.WorkingDirectory) {
-				workDir = step.WorkingDirectory
-			} else {
-				workDir = filepath.Join(runCtx.workDir, step.WorkingDirectory)
+			// Validate working directory for security
+			if err := security.ValidateWorkingDirectory(step.WorkingDirectory, runCtx.workDir); err != nil {
+				return nil, fmt.Errorf("step %q: %w", stepName, err)
 			}
+			// Path is validated, safe to use
+			workDir = filepath.Join(runCtx.workDir, filepath.Clean(step.WorkingDirectory))
 		}
 
 		// Execute the step
@@ -260,7 +258,16 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 		// Update accumulated environment from GITHUB_ENV
 		newEnv, err := envfiles.ParseEnvFile(envFilePath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse GITHUB_ENV: %w", err)
+			// Print detailed security error message
+			fmt.Fprintln(r.stderr, "")
+			fmt.Fprintln(r.stderr, "❌ Security Error:")
+			fmt.Fprintln(r.stderr, err.Error())
+			fmt.Fprintln(r.stderr, "")
+			fmt.Fprintln(r.stderr, "This restriction protects your system from potentially malicious workflows.")
+			fmt.Fprintln(r.stderr, "See: https://github.com/watany-dev/raptor/blob/main/SECURITY.md")
+			fmt.Fprintln(r.stderr, "")
+
+			return nil, fmt.Errorf("security validation failed: %w", err)
 		}
 		accumulatedEnv = runtime.MergeEnv(accumulatedEnv, newEnv)
 
@@ -279,4 +286,18 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 	}
 
 	return result, nil
+}
+
+// printSecurityWarning prints a security warning before execution.
+func (r *Runner) printSecurityWarning(opts *RunOptions) {
+	fmt.Fprintln(r.stderr, "")
+	fmt.Fprintln(r.stderr, "⚠️  SECURITY WARNING")
+	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(r.stderr, "This tool executes commands from workflow files with your user privileges.")
+	fmt.Fprintln(r.stderr, "Only run workflows from trusted sources.")
+	fmt.Fprintln(r.stderr, "")
+	fmt.Fprintf(r.stderr, "Workflow: %s\n", opts.Workflow)
+	fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
+	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(r.stderr, "")
 }

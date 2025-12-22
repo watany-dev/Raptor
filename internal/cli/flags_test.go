@@ -157,39 +157,15 @@ func TestParseRunFlags_DefaultWorkDir(t *testing.T) {
 	}
 }
 
-func TestParseRunFlags_IsolateFlag(t *testing.T) {
-	tests := []struct {
-		name        string
-		args        []string
-		wantIsolate bool
-	}{
-		{
-			name:        "no isolate flag",
-			args:        []string{"--workflow", "ci.yml", "--job", "build"},
-			wantIsolate: false,
-		},
-		{
-			name:        "long form --isolate",
-			args:        []string{"--workflow", "ci.yml", "--job", "build", "--isolate"},
-			wantIsolate: true,
-		},
-		{
-			name:        "short form -i",
-			args:        []string{"-w", "ci.yml", "-j", "build", "-i"},
-			wantIsolate: true,
-		},
+func TestParseRunFlags_IsolateAlwaysTrue(t *testing.T) {
+	// Isolated execution is now mandatory for security
+	// The --isolate flag has been removed
+	opts, err := ParseRunFlags([]string{"--workflow", "ci.yml", "--job", "build"})
+	if err != nil {
+		t.Fatalf("ParseRunFlags() error = %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			opts, err := ParseRunFlags(tt.args)
-			if err != nil {
-				t.Fatalf("ParseRunFlags() error = %v", err)
-			}
-			if opts.Isolate != tt.wantIsolate {
-				t.Errorf("Isolate = %v, want %v", opts.Isolate, tt.wantIsolate)
-			}
-		})
+	if !opts.Isolate {
+		t.Error("Isolate should always be true for security")
 	}
 }
 

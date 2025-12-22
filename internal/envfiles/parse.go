@@ -2,8 +2,11 @@ package envfiles
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
+
+	"github.com/watany-dev/raptor/internal/security"
 )
 
 // ParseEnvFile parses a GITHUB_ENV file and returns the environment variables.
@@ -35,8 +38,13 @@ func ParseEnvFile(path string) (map[string]string, error) {
 
 		// Check for multiline delimiter format: KEY<<DELIMITER
 		if idx := strings.Index(line, "<<"); idx != -1 {
-			key := line[:idx]
-			delimiter := line[idx+2:]
+			key := strings.TrimSpace(line[:idx])
+			delimiter := strings.TrimSpace(line[idx+2:])
+
+			// Validate key name for security
+			if err := security.ValidateEnvVarName(key); err != nil {
+				return nil, fmt.Errorf("invalid environment variable in %s: %w", path, err)
+			}
 
 			// Read lines until we hit the delimiter
 			var valueLines []string
@@ -47,14 +55,32 @@ func ParseEnvFile(path string) (map[string]string, error) {
 				}
 				valueLines = append(valueLines, valueLine)
 			}
-			result[key] = strings.Join(valueLines, "\n")
+			value := strings.Join(valueLines, "\n")
+
+			// Validate value for security
+			if err := security.ValidateEnvVarValue(key, value); err != nil {
+				return nil, fmt.Errorf("invalid environment variable in %s: %w", path, err)
+			}
+
+			result[key] = value
 			continue
 		}
 
 		// Simple KEY=VALUE format
 		if idx := strings.Index(line, "="); idx != -1 {
-			key := line[:idx]
+			key := strings.TrimSpace(line[:idx])
 			value := line[idx+1:]
+
+			// Validate key name for security
+			if err := security.ValidateEnvVarName(key); err != nil {
+				return nil, fmt.Errorf("invalid environment variable in %s: %w", path, err)
+			}
+
+			// Validate value for security
+			if err := security.ValidateEnvVarValue(key, value); err != nil {
+				return nil, fmt.Errorf("invalid environment variable in %s: %w", path, err)
+			}
+
 			result[key] = value
 		}
 	}

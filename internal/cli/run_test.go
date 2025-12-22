@@ -3,12 +3,59 @@ package cli
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/watany-dev/raptor/internal/executor"
 )
+
+// setupTestGitRepo creates a minimal git repository for testing.
+func setupTestGitRepo(t *testing.T, dir string) {
+	t.Helper()
+
+	cmd := exec.Command("git", "init")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test User", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=Test User", "GIT_COMMITTER_EMAIL=test@test.com")
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to init git repo: %v", err)
+	}
+
+	// Configure git user for the repo
+	cmd = exec.Command("git", "config", "user.email", "test@test.com")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	cmd = exec.Command("git", "config", "user.name", "Test User")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	// Disable GPG signing for tests
+	cmd = exec.Command("git", "config", "commit.gpgsign", "false")
+	cmd.Dir = dir
+	_ = cmd.Run()
+
+	// Create and commit a dummy file
+	dummyFile := filepath.Join(dir, ".gitkeep")
+	if err := os.WriteFile(dummyFile, []byte(""), 0644); err != nil {
+		t.Fatalf("Failed to write dummy file: %v", err)
+	}
+
+	cmd = exec.Command("git", "add", ".")
+	cmd.Dir = dir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to git add: %v", err)
+	}
+
+	cmd = exec.Command("git", "-c", "user.name=Test User", "-c", "user.email=test@test.com", "commit", "-m", "initial")
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test User", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=Test User", "GIT_COMMITTER_EMAIL=test@test.com")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("Failed to git commit: %v, output: %s", err, string(output))
+	}
+}
 
 // mockExecutor is a mock implementation of executor.Executor for testing.
 type mockExecutor struct {
@@ -35,8 +82,9 @@ func (m *mockExecutor) Execute(config executor.Config) (executor.Result, error) 
 }
 
 func TestRunner_Run_MultipleStepsExecuted(t *testing.T) {
-	// Create a temporary workflow file
+	// Create a temporary git repository
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -99,6 +147,7 @@ jobs:
 
 func TestRunner_Run_StepFailure(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -164,6 +213,7 @@ jobs:
 
 func TestRunner_Run_EnvInheritance(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -234,6 +284,7 @@ jobs:
 
 func TestRunner_Run_GithubEnvPersistence(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -310,6 +361,7 @@ func (m *envSettingMock) Execute(config executor.Config) (executor.Result, error
 
 func TestRunner_Run_WorkingDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	subDir := filepath.Join(tmpDir, "subdir")
 	if err := os.MkdirAll(subDir, 0755); err != nil {
 		t.Fatalf("Failed to create subdir: %v", err)
@@ -353,17 +405,22 @@ jobs:
 	}
 
 	// Check working directories
-	if mock.calls[0].WorkingDir != tmpDir {
-		t.Errorf("Step 1 working dir = %v, want %v", mock.calls[0].WorkingDir, tmpDir)
+	// Note: Since workflows run in isolated worktrees, the actual working directory
+	// will be inside the worktree, not the original tmpDir.
+	// We check that:
+	// 1. Step 1 is in the worktree root (ends with the worktree ID, not "subdir")
+	// 2. Step 2 is in the worktree's subdir (ends with "/subdir")
+	if strings.HasSuffix(mock.calls[0].WorkingDir, "/subdir") {
+		t.Errorf("Step 1 working dir should not end with /subdir, got %v", mock.calls[0].WorkingDir)
 	}
-	expectedSubDir := filepath.Join(tmpDir, "subdir")
-	if mock.calls[1].WorkingDir != expectedSubDir {
-		t.Errorf("Step 2 working dir = %v, want %v", mock.calls[1].WorkingDir, expectedSubDir)
+	if !strings.HasSuffix(mock.calls[1].WorkingDir, "/subdir") {
+		t.Errorf("Step 2 working dir should end with /subdir, got %v", mock.calls[1].WorkingDir)
 	}
 }
 
 func TestRunner_Run_OutputFormatting(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -426,6 +483,7 @@ func TestRunner_Run_InvalidWorkflow(t *testing.T) {
 
 func TestRunner_Run_InvalidJob(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -454,6 +512,7 @@ jobs:
 
 func TestRunner_Run_AllJobs(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
@@ -530,6 +589,7 @@ jobs:
 
 func TestRunner_Run_DefaultEnvVars(t *testing.T) {
 	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
 	workflowContent := `
 name: Test Workflow
