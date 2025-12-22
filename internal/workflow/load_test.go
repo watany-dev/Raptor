@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -161,4 +162,45 @@ jobs:
 			t.Errorf("step.Run = %q, want %q", job.Steps[0].Run, "echo hello")
 		}
 	})
+}
+
+// BenchmarkLoadWorkflowFile benchmarks the workflow file loading performance.
+func BenchmarkLoadWorkflowFile(b *testing.B) {
+	// Create a workflow with multiple jobs and steps to simulate realistic usage
+	yamlContent := `name: Benchmark Workflow
+env:
+  GLOBAL_VAR: global_value
+jobs:
+`
+	// Add multiple jobs with multiple steps
+	for i := 0; i < 10; i++ {
+		yamlContent += fmt.Sprintf(`  job%d:
+    name: Job %d
+    runs-on: ubuntu-latest
+    env:
+      JOB_VAR: job_value_%d
+    steps:
+`, i, i, i)
+		for j := 0; j < 5; j++ {
+			yamlContent += fmt.Sprintf(`      - name: Step %d-%d
+        run: echo "Running step %d in job %d"
+        env:
+          STEP_VAR: step_value_%d_%d
+`, i, j, j, i, i, j)
+		}
+	}
+
+	tmpDir := b.TempDir()
+	workflowPath := filepath.Join(tmpDir, "benchmark.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		b.Fatalf("failed to write test file: %v", err)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		_, err := LoadWorkflowFile(workflowPath)
+		if err != nil {
+			b.Fatalf("LoadWorkflowFile() error = %v", err)
+		}
+	}
 }

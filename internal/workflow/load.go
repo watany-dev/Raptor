@@ -14,35 +14,47 @@ func LoadWorkflowFile(path string) (*WorkflowFile, error) {
 		return nil, fmt.Errorf("failed to read workflow file: %w", err)
 	}
 
-	var wf WorkflowFile
-	if err := yaml.Unmarshal(data, &wf); err != nil {
+	// Parse YAML into yaml.Node once (instead of parsing twice)
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("failed to parse workflow YAML: %w", err)
 	}
 
-	// Extract job order from YAML structure
-	wf.JobOrder, err = extractJobOrder(data)
+	// Extract both WorkflowFile and JobOrder from the single parsed Node
+	wf, jobOrder, err := parseWorkflowFromNode(&root)
 	if err != nil {
-		return nil, fmt.Errorf("failed to extract job order: %w", err)
+		return nil, fmt.Errorf("failed to parse workflow: %w", err)
 	}
+	wf.JobOrder = jobOrder
 
-	return &wf, nil
+	return wf, nil
 }
 
-// extractJobOrder parses the YAML to get job IDs in definition order.
-func extractJobOrder(data []byte) ([]string, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return nil, err
+// parseWorkflowFromNode extracts WorkflowFile and job order from a parsed yaml.Node.
+// This avoids parsing the YAML twice by reusing the same Node for both operations.
+func parseWorkflowFromNode(root *yaml.Node) (*WorkflowFile, []string, error) {
+	var wf WorkflowFile
+	// Decode the Node directly into the struct (no re-parsing needed)
+	if err := root.Decode(&wf); err != nil {
+		return nil, nil, fmt.Errorf("failed to decode workflow: %w", err)
 	}
 
+	// Extract job order from the same Node
+	jobOrder := extractJobOrderFromNode(root)
+
+	return &wf, jobOrder, nil
+}
+
+// extractJobOrderFromNode extracts job IDs in definition order from a parsed yaml.Node.
+func extractJobOrderFromNode(root *yaml.Node) []string {
 	// root.Content[0] is the document node
 	if len(root.Content) == 0 {
-		return nil, nil
+		return nil
 	}
 
 	doc := root.Content[0]
 	if doc.Kind != yaml.MappingNode {
-		return nil, nil
+		return nil
 	}
 
 	// Find the "jobs" key in the mapping
@@ -57,9 +69,9 @@ func extractJobOrder(data []byte) ([]string, error) {
 				jobKeyNode := valueNode.Content[j]
 				jobOrder = append(jobOrder, jobKeyNode.Value)
 			}
-			return jobOrder, nil
+			return jobOrder
 		}
 	}
 
-	return nil, nil
+	return nil
 }
