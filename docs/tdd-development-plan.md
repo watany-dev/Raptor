@@ -194,9 +194,9 @@
 **目標**: `raptor run`コマンドの基本形
 
 **テストケース**:
-- [ ] --workflow フラグを受け付ける
-- [ ] --job フラグを受け付ける
-- [ ] ヘルプが表示される
+- [x] --workflow フラグを受け付ける
+- [x] --job フラグを受け付ける
+- [x] ヘルプが表示される
 
 **ファイル**:
 - `cmd/raptor/main.go`
@@ -207,8 +207,8 @@
 **目標**: 全ステップを順番に実行
 
 **テストケース**:
-- [ ] 複数のステップが順番に実行される
-- [ ] ステップ間で環境変数が引き継がれる
+- [x] 複数のステップが順番に実行される
+- [x] ステップ間で環境変数が引き継がれる
 
 **ファイル**:
 - `internal/cli/run.go`
@@ -231,16 +231,28 @@
 | 4 | 4.2 環境変数マージ | ✅ 完了 |
 | 5 | 5.1 GITHUB_ENV | ✅ 完了 |
 | 5 | 5.2 GITHUB_PATH | ✅ 完了 |
-| 6 | 6.1 基本CLI | 🔄 次に実装 |
-| 6 | 6.2 ジョブ実行ループ | ⏳ 待機 |
+| 6 | 6.1 基本CLI | ✅ 完了 |
+| 6 | 6.2 ジョブ実行ループ | ✅ 完了 |
 
 ---
 
-## 次のアクション
+## 完了
 
-**Iteration 6.1: 基本CLI** を実装
+すべてのIterationが完了しました。
 
-1. `cmd/raptor/main.go` を作成
-2. `internal/cli/flags.go` と `internal/cli/run.go` にテストを書く
-3. テストが失敗することを確認
-4. 実装してテストが成功することを確認
+### 実装された機能
+
+- `raptor run` コマンド: ワークフローファイルを指定してジョブを実行
+- `--workflow` / `-w`: ワークフローファイルのパス指定
+- `--job` / `-j`: 実行するジョブID指定
+- `--workdir` / `-C`: 作業ディレクトリ指定
+- ステップの順次実行
+- 環境変数のマージ (workflow → job → step)
+- GITHUB_ENV / GITHUB_PATH のサポート
+
+### 使用例
+
+```bash
+raptor run --workflow .github/workflows/ci.yml --job build
+raptor run -w ci.yml -j test -C /path/to/repo
+```

@@ -1,0 +1,176 @@
+package cli
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/watany-dev/raptor/internal/envfiles"
+	"github.com/watany-dev/raptor/internal/executor"
+	"github.com/watany-dev/raptor/internal/runtime"
+	"github.com/watany-dev/raptor/internal/workflow"
+)
+
+// Runner handles the execution of workflow jobs.
+type Runner struct {
+	executor executor.Executor
+	stdout   io.Writer
+	stderr   io.Writer
+}
+
+// NewRunner creates a new Runner with the given executor.
+func NewRunner(exec executor.Executor) *Runner {
+	return &Runner{
+		executor: exec,
+		stdout:   os.Stdout,
+		stderr:   os.Stderr,
+	}
+}
+
+// SetOutput sets the output writers for the runner.
+func (r *Runner) SetOutput(stdout, stderr io.Writer) {
+	r.stdout = stdout
+	r.stderr = stderr
+}
+
+// StepResult contains the result of a single step execution.
+type StepResult struct {
+	StepIndex int
+	StepName  string
+	ExitCode  int
+	Stdout    string
+	Stderr    string
+}
+
+// RunResult contains the results of running a job.
+type RunResult struct {
+	JobID       string
+	Success     bool
+	StepResults []StepResult
+}
+
+// Run executes a workflow job with the given options.
+func (r *Runner) Run(opts *RunOptions) (*RunResult, error) {
+	// Load the workflow file
+	wf, err := workflow.LoadWorkflowFile(opts.Workflow)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load workflow: %w", err)
+	}
+
+	// Select the job
+	job, err := workflow.SelectJob(wf, opts.Job)
+	if err != nil {
+		return nil, fmt.Errorf("failed to select job: %w", err)
+	}
+
+	result := &RunResult{
+		JobID:       opts.Job,
+		Success:     true,
+		StepResults: make([]StepResult, 0, len(job.Steps)),
+	}
+
+	// Create temporary directory for environment files
+	tmpDir, err := os.MkdirTemp("", "raptor-")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp directory: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+	pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+	// Initialize environment with workflow-level env
+	accumulatedEnv := runtime.MergeEnv(wf.Env, job.Env)
+
+	// Add GITHUB_ENV and GITHUB_PATH paths to env
+	accumulatedEnv["GITHUB_ENV"] = envFilePath
+	accumulatedEnv["GITHUB_PATH"] = pathFilePath
+
+	// Execute steps sequentially
+	for i, step := range job.Steps {
+		stepName := step.Name
+		if stepName == "" {
+			stepName = fmt.Sprintf("Step %d", i+1)
+		}
+
+		fmt.Fprintf(r.stdout, "::group::%s\n", stepName)
+
+		// Merge step-level env
+		stepEnv := runtime.MergeEnv(accumulatedEnv, step.Env)
+
+		// Determine working directory
+		workDir := opts.WorkingDir
+		if step.WorkingDirectory != "" {
+			if filepath.IsAbs(step.WorkingDirectory) {
+				workDir = step.WorkingDirectory
+			} else {
+				workDir = filepath.Join(opts.WorkingDir, step.WorkingDirectory)
+			}
+		}
+
+		// Execute the step
+		execResult, err := r.executor.Execute(executor.Config{
+			Command:    step.Run,
+			Env:        stepEnv,
+			WorkingDir: workDir,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to execute step %q: %w", stepName, err)
+		}
+
+		// Print step output
+		if execResult.Stdout != "" {
+			fmt.Fprint(r.stdout, execResult.Stdout)
+			if !strings.HasSuffix(execResult.Stdout, "\n") {
+				fmt.Fprintln(r.stdout)
+			}
+		}
+		if execResult.Stderr != "" {
+			fmt.Fprint(r.stderr, execResult.Stderr)
+			if !strings.HasSuffix(execResult.Stderr, "\n") {
+				fmt.Fprintln(r.stderr)
+			}
+		}
+
+		stepResult := StepResult{
+			StepIndex: i,
+			StepName:  stepName,
+			ExitCode:  execResult.ExitCode,
+			Stdout:    execResult.Stdout,
+			Stderr:    execResult.Stderr,
+		}
+		result.StepResults = append(result.StepResults, stepResult)
+
+		fmt.Fprintf(r.stdout, "::endgroup::\n")
+
+		// Check if step failed
+		if execResult.ExitCode != 0 {
+			result.Success = false
+			return result, nil
+		}
+
+		// Update accumulated environment from GITHUB_ENV
+		newEnv, err := envfiles.ParseEnvFile(envFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse GITHUB_ENV: %w", err)
+		}
+		accumulatedEnv = runtime.MergeEnv(accumulatedEnv, newEnv)
+
+		// Update PATH from GITHUB_PATH
+		newPaths, err := envfiles.ParsePathFile(pathFilePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse GITHUB_PATH: %w", err)
+		}
+		if len(newPaths) > 0 {
+			currentPath := accumulatedEnv["PATH"]
+			if currentPath == "" {
+				currentPath = os.Getenv("PATH")
+			}
+			accumulatedEnv["PATH"] = envfiles.PrependPath(currentPath, newPaths)
+		}
+	}
+
+	return result, nil
+}
