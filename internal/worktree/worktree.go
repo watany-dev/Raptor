@@ -21,10 +21,13 @@ const (
 
 // CreateWorkspace creates a new isolated git worktree for running workflows.
 // The worktree is created under .raptor/ws-<id> in the repository root.
-func CreateWorkspace(ctx context.Context, repoRoot string) (*Workspace, error) {
-	// Verify this is a git repository
-	if err := verifyGitRepo(ctx, repoRoot); err != nil {
-		return nil, err
+// If verified is true, skips git repository verification (use when caller has already verified).
+func CreateWorkspace(ctx context.Context, repoRoot string, verified bool) (*Workspace, error) {
+	// Verify this is a git repository (skip if already verified by caller)
+	if !verified {
+		if err := verifyGitRepo(ctx, repoRoot); err != nil {
+			return nil, err
+		}
 	}
 
 	// Generate unique workspace ID

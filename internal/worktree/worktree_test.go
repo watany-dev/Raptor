@@ -15,7 +15,7 @@ func TestCreateWorkspace(t *testing.T) {
 	repoRoot := findTestRepoRoot(t)
 
 	t.Run("creates new worktree successfully", func(t *testing.T) {
-		ws, err := CreateWorkspace(ctx, repoRoot)
+		ws, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -44,13 +44,13 @@ func TestCreateWorkspace(t *testing.T) {
 	})
 
 	t.Run("workspace ID is unique", func(t *testing.T) {
-		ws1, err := CreateWorkspace(ctx, repoRoot)
+		ws1, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("failed to create first workspace: %v", err)
 		}
 		defer func() { _ = RemoveWorkspace(ctx, ws1) }()
 
-		ws2, err := CreateWorkspace(ctx, repoRoot)
+		ws2, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("failed to create second workspace: %v", err)
 		}
@@ -66,7 +66,7 @@ func TestCreateWorkspace(t *testing.T) {
 	})
 
 	t.Run("worktree is created in correct location", func(t *testing.T) {
-		ws, err := CreateWorkspace(ctx, repoRoot)
+		ws, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("expected no error, got: %v", err)
 		}
@@ -85,7 +85,7 @@ func TestCreateWorkspace(t *testing.T) {
 	})
 
 	t.Run("returns error for non-git directory", func(t *testing.T) {
-		_, err := CreateWorkspace(ctx, "/tmp")
+		_, err := CreateWorkspace(ctx, "/tmp", false)
 		if err == nil {
 			t.Error("expected error for non-git directory, got nil")
 		}
@@ -97,7 +97,7 @@ func TestRemoveWorkspace(t *testing.T) {
 	repoRoot := findTestRepoRoot(t)
 
 	t.Run("removes worktree successfully", func(t *testing.T) {
-		ws, err := CreateWorkspace(ctx, repoRoot)
+		ws, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("failed to create workspace: %v", err)
 		}
@@ -115,7 +115,7 @@ func TestRemoveWorkspace(t *testing.T) {
 	})
 
 	t.Run("directory does not exist after removal", func(t *testing.T) {
-		ws, err := CreateWorkspace(ctx, repoRoot)
+		ws, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("failed to create workspace: %v", err)
 		}
