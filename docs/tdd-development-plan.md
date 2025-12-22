@@ -125,8 +125,8 @@
 **目標**: 特定のJobを選択する
 
 **テストケース**:
-- [ ] 存在するJobIDで正しいJobを返す
-- [ ] 存在しないJobIDでエラーを返す
+- [x] 存在するJobIDで正しいJobを返す
+- [x] 存在しないJobIDでエラーを返す
 
 **ファイル**:
 - `internal/workflow/select.go`
@@ -225,9 +225,9 @@
 | 2 | 2.1 CreateWorkspace | ✅ 完了 |
 | 2 | 2.2 RemoveWorkspace | ✅ 完了 |
 | 3 | 3.1 WorkflowFile | ✅ 完了 |
-| 3 | 3.2 ワークフロー探索 | 🔄 次に実装 |
-| 3 | 3.3 Job選択 | ⏳ 待機 |
-| 4 | 4.1 HostExecutor | ⏳ 待機 |
+| 3 | 3.2 ワークフロー探索 | ✅ 完了 |
+| 3 | 3.3 Job選択 | ✅ 完了 |
+| 4 | 4.1 HostExecutor | 🔄 次に実装 |
 | 4 | 4.2 環境変数マージ | ⏳ 待機 |
 | 5 | 5.1 GITHUB_ENV | ⏳ 待機 |
 | 5 | 5.2 GITHUB_PATH | ⏳ 待機 |
@@ -238,9 +238,9 @@
 
 ## 次のアクション
 
-**Iteration 3.2: ワークフロー探索** を実装
+**Iteration 4.1: HostExecutor基本実装** を実装
 
-1. `internal/workflow/select_test.go` にテストを書く
+1. `internal/executor/host_test.go` にテストを書く
 2. テストが失敗することを確認
-3. `internal/workflow/select.go` に実装
+3. `internal/executor/host.go` に実装
 4. テストが成功することを確認

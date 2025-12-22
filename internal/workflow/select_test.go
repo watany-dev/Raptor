@@ -127,3 +127,80 @@ func TestDiscoverWorkflows(t *testing.T) {
 		}
 	})
 }
+
+func TestSelectJob(t *testing.T) {
+	t.Run("returns correct job for existing job ID", func(t *testing.T) {
+		wf := &WorkflowFile{
+			Name: "Test Workflow",
+			Jobs: map[string]Job{
+				"build": {
+					Name:   "Build Job",
+					RunsOn: "ubuntu-latest",
+					Steps: []Step{
+						{Name: "Checkout", Run: "echo checkout"},
+					},
+				},
+				"test": {
+					Name:   "Test Job",
+					RunsOn: "ubuntu-latest",
+					Steps: []Step{
+						{Name: "Run tests", Run: "go test ./..."},
+					},
+				},
+			},
+		}
+
+		job, err := SelectJob(wf, "build")
+		if err != nil {
+			t.Fatalf("SelectJob() error = %v", err)
+		}
+
+		if job.Name != "Build Job" {
+			t.Errorf("job.Name = %q, want %q", job.Name, "Build Job")
+		}
+		if job.RunsOn != "ubuntu-latest" {
+			t.Errorf("job.RunsOn = %q, want %q", job.RunsOn, "ubuntu-latest")
+		}
+		if len(job.Steps) != 1 {
+			t.Errorf("len(job.Steps) = %d, want 1", len(job.Steps))
+		}
+	})
+
+	t.Run("returns error for non-existent job ID", func(t *testing.T) {
+		wf := &WorkflowFile{
+			Name: "Test Workflow",
+			Jobs: map[string]Job{
+				"build": {
+					Name:   "Build Job",
+					RunsOn: "ubuntu-latest",
+				},
+			},
+		}
+
+		_, err := SelectJob(wf, "nonexistent")
+		if err == nil {
+			t.Error("SelectJob() expected error for non-existent job ID, got nil")
+		}
+	})
+
+	t.Run("returns error for nil workflow", func(t *testing.T) {
+		_, err := SelectJob(nil, "build")
+		if err == nil {
+			t.Error("SelectJob() expected error for nil workflow, got nil")
+		}
+	})
+
+	t.Run("returns error for empty job ID", func(t *testing.T) {
+		wf := &WorkflowFile{
+			Name: "Test Workflow",
+			Jobs: map[string]Job{
+				"build": {Name: "Build Job"},
+			},
+		}
+
+		_, err := SelectJob(wf, "")
+		if err == nil {
+			t.Error("SelectJob() expected error for empty job ID, got nil")
+		}
+	})
+}
