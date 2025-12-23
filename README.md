@@ -133,10 +133,45 @@ raptor --version
 | `working-directory` | ✅ |
 | `GITHUB_ENV` | ✅ |
 | `GITHUB_PATH` | ✅ |
+| `if` (条件分岐) | ✅ (基本構文) |
 | `uses` (アクション) | ❌ |
 | `with` (アクション入力) | ❌ |
-| `if` (条件分岐) | ❌ |
 | `matrix` (マトリックスビルド) | ❌ |
+
+### 条件分岐 (`if`)
+
+ステップの条件実行がサポートされています：
+
+```yaml
+steps:
+  - name: Always run
+    if: true
+    run: echo "This always runs"
+
+  - name: Conditional
+    if: ${{ env.MY_VAR == 'value' }}
+    run: echo "Runs when MY_VAR is 'value'"
+
+  - name: On failure
+    if: failure()
+    run: echo "Runs only if previous step failed"
+
+  - name: Always (even on failure)
+    if: always()
+    run: echo "Cleanup step"
+```
+
+**サポートされる条件構文:**
+
+| 構文 | 説明 |
+|------|------|
+| `true` / `false` | リテラル真偽値 |
+| `success()` | 前のステップがすべて成功 |
+| `failure()` | いずれかのステップが失敗 |
+| `always()` | 常に実行（失敗後も継続） |
+| `${{ env.VAR == 'value' }}` | 環境変数の比較 |
+| `${{ env.VAR != 'value' }}` | 環境変数の否定比較 |
+| `${{ steps.ID.outcome == 'success' }}` | ステップ結果の参照 |
 
 ### サンプルワークフロー
 

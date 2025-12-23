@@ -159,7 +159,7 @@ jobs:
         run: echo "success"
       - name: Step 2 (fails)
         run: exit 1
-      - name: Step 3 (should not run)
+      - name: Step 3 (should be skipped)
         run: echo "never"
 `
 	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
@@ -202,12 +202,17 @@ jobs:
 		t.Errorf("Expected 2 step executions, got %d", len(mock.calls))
 	}
 
-	// Verify step 2 has non-zero exit code
-	if len(result.StepResults) != 2 {
-		t.Errorf("Expected 2 step results, got %d", len(result.StepResults))
+	// Verify we have 3 step results (executed, executed, skipped)
+	if len(result.StepResults) != 3 {
+		t.Errorf("Expected 3 step results, got %d", len(result.StepResults))
 	}
+	// Verify step 2 has non-zero exit code
 	if result.StepResults[1].ExitCode != 1 {
 		t.Errorf("Expected exit code 1 for step 2, got %d", result.StepResults[1].ExitCode)
+	}
+	// Verify step 3 was skipped
+	if !result.StepResults[2].Skipped {
+		t.Error("Step 3 should be skipped after step 2 failure")
 	}
 }
 
@@ -640,5 +645,274 @@ jobs:
 	}
 	if env["GITHUB_PATH"] == "" {
 		t.Error("GITHUB_PATH should be set")
+	}
+}
+
+func TestRunner_Run_IfConditionTrue(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Always run
+        if: true
+        run: echo "executed"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0, Stdout: "executed\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Step should be executed
+	if len(mock.calls) != 1 {
+		t.Errorf("Expected 1 step execution, got %d", len(mock.calls))
+	}
+
+	// Verify step was not skipped
+	if len(results) != 1 || len(results[0].StepResults) != 1 {
+		t.Fatalf("Expected 1 job with 1 step result")
+	}
+	if results[0].StepResults[0].Skipped {
+		t.Error("Step should not be skipped when if: true")
+	}
+}
+
+func TestRunner_Run_IfConditionFalse(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Never run
+        if: false
+        run: echo "should not execute"
+      - name: Always run
+        run: echo "executed"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0, Stdout: "executed\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Only second step should be executed
+	if len(mock.calls) != 1 {
+		t.Errorf("Expected 1 step execution (first skipped), got %d", len(mock.calls))
+	}
+
+	// Verify first step was skipped
+	if len(results) != 1 || len(results[0].StepResults) != 2 {
+		t.Fatalf("Expected 1 job with 2 step results")
+	}
+	if !results[0].StepResults[0].Skipped {
+		t.Error("First step should be skipped when if: false")
+	}
+	if results[0].StepResults[1].Skipped {
+		t.Error("Second step should not be skipped")
+	}
+}
+
+func TestRunner_Run_IfConditionEnvVar(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+env:
+  RUN_STEP: "yes"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Conditional step
+        if: ${{ env.RUN_STEP == 'yes' }}
+        run: echo "executed"
+      - name: Skipped step
+        if: ${{ env.RUN_STEP == 'no' }}
+        run: echo "should not execute"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0, Stdout: "executed\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Only first step should be executed
+	if len(mock.calls) != 1 {
+		t.Errorf("Expected 1 step execution, got %d", len(mock.calls))
+	}
+
+	// Verify correct steps were skipped/executed
+	if len(results) != 1 || len(results[0].StepResults) != 2 {
+		t.Fatalf("Expected 1 job with 2 step results")
+	}
+	if results[0].StepResults[0].Skipped {
+		t.Error("First step should not be skipped (env.RUN_STEP == 'yes')")
+	}
+	if !results[0].StepResults[1].Skipped {
+		t.Error("Second step should be skipped (env.RUN_STEP != 'no')")
+	}
+}
+
+func TestRunner_Run_IfConditionAlways(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Failing step
+        run: exit 1
+      - name: Cleanup (always)
+        if: always()
+        run: echo "cleanup"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 1, Stderr: "failed\n"},
+		executor.Result{ExitCode: 0, Stdout: "cleanup\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Both steps should be executed (always() runs even after failure)
+	if len(mock.calls) != 2 {
+		t.Errorf("Expected 2 step executions (always() should run after failure), got %d", len(mock.calls))
+	}
+
+	// Verify job failed but cleanup ran
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 job result")
+	}
+	// Note: Job still fails overall because a step failed
+}
+
+func TestRunner_Run_IfConditionFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Failing step
+        run: exit 1
+      - name: On failure only
+        if: failure()
+        run: echo "failure handler"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 1, Stderr: "failed\n"},
+		executor.Result{ExitCode: 0, Stdout: "failure handler\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Both steps should be executed (failure() runs after failure)
+	if len(mock.calls) != 2 {
+		t.Errorf("Expected 2 step executions (failure() should run after failure), got %d", len(mock.calls))
+	}
+
+	// Verify job failed
+	if len(results) != 1 {
+		t.Fatalf("Expected 1 job result")
 	}
 }
