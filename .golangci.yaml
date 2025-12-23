@@ -1,28 +1,23 @@
-# golangci-lint configuration v2
+# golangci-lint configuration
 # https://golangci-lint.run/usage/configuration/
-
-version: "2"
 
 run:
   timeout: 5m
+  tests: true
 
 linters:
-  default: standard
   enable:
     - errcheck
     - errorlint
+    - gofmt
+    - goimports
     - misspell
     - gocritic
     - unconvert
     - govet
     - gocyclo
 
-formatters:
-  enable:
-    - gofmt
-    - goimports
-
-settings:
+linters-settings:
   gocyclo:
     min-complexity: 15
 
@@ -42,14 +37,12 @@ settings:
     check-type-assertions: true
     check-blank: true
 
-exclusions:
-  paths:
-    - testdata
-  rules:
-    - path: _test\.go$
-      linters:
-        - errcheck
-
 issues:
   max-issues-per-linter: 50
   max-same-issues: 10
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - errcheck
+  exclude-dirs:
+    - testdata

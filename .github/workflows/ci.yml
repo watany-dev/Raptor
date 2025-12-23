@@ -61,9 +61,9 @@ jobs:
           fi
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v7
+        uses: golangci/golangci-lint-action@v6
         with:
-          version: v2.5.0
+          version: v1.64
 
   build:
     name: Build
