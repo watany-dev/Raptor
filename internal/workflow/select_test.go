@@ -204,3 +204,91 @@ func TestSelectJob(t *testing.T) {
 		}
 	})
 }
+
+// TestDiscoverWorkflowsEdgeCases tests edge cases for DiscoverWorkflows
+func TestDiscoverWorkflowsEdgeCases(t *testing.T) {
+	t.Run("returns error when workflows path is a file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		// Create a file instead of a directory at .github/workflows
+		ghDir := filepath.Join(tmpDir, ".github")
+		if err := os.MkdirAll(ghDir, 0755); err != nil {
+			t.Fatalf("failed to create .github directory: %v", err)
+		}
+
+		workflowsFile := filepath.Join(ghDir, "workflows")
+		if err := os.WriteFile(workflowsFile, []byte("not a directory"), 0644); err != nil {
+			t.Fatalf("failed to create workflows file: %v", err)
+		}
+
+		_, err := DiscoverWorkflows(tmpDir)
+		if err == nil {
+			t.Error("DiscoverWorkflows() expected error when workflows path is a file, got nil")
+		}
+	})
+
+	t.Run("discovers workflows with mixed case extensions", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowsDir := filepath.Join(tmpDir, ".github", "workflows")
+		if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+			t.Fatalf("failed to create workflows directory: %v", err)
+		}
+
+		// Create files with various case extensions
+		files := []string{"workflow.YML", "test.YAML", "ci.yml", "deploy.yaml"}
+		for _, file := range files {
+			path := filepath.Join(workflowsDir, file)
+			if err := os.WriteFile(path, []byte("name: Test"), 0644); err != nil {
+				t.Fatalf("failed to write file %s: %v", file, path)
+			}
+		}
+
+		workflows, err := DiscoverWorkflows(tmpDir)
+		if err != nil {
+			t.Fatalf("DiscoverWorkflows() error = %v", err)
+		}
+
+		// Should discover all 4 files regardless of case
+		if len(workflows) != 4 {
+			t.Errorf("len(workflows) = %d, want 4", len(workflows))
+		}
+	})
+
+	t.Run("ignores subdirectories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowsDir := filepath.Join(tmpDir, ".github", "workflows")
+		if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+			t.Fatalf("failed to create workflows directory: %v", err)
+		}
+
+		// Create a valid workflow file
+		workflowFile := filepath.Join(workflowsDir, "valid.yml")
+		if err := os.WriteFile(workflowFile, []byte("name: Valid"), 0644); err != nil {
+			t.Fatalf("failed to write workflow file: %v", err)
+		}
+
+		// Create a subdirectory with workflow files
+		subDir := filepath.Join(workflowsDir, "subdir")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatalf("failed to create subdirectory: %v", err)
+		}
+
+		subWorkflow := filepath.Join(subDir, "workflow.yml")
+		if err := os.WriteFile(subWorkflow, []byte("name: Sub"), 0644); err != nil {
+			t.Fatalf("failed to write sub workflow: %v", err)
+		}
+
+		workflows, err := DiscoverWorkflows(tmpDir)
+		if err != nil {
+			t.Fatalf("DiscoverWorkflows() error = %v", err)
+		}
+
+		// Should only discover the one file in the root workflows directory
+		if len(workflows) != 1 {
+			t.Errorf("len(workflows) = %d, want 1", len(workflows))
+		}
+
+		if filepath.Base(workflows[0]) != "valid.yml" {
+			t.Errorf("discovered workflow = %s, want valid.yml", filepath.Base(workflows[0]))
+		}
+	})
+}

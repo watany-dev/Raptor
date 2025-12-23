@@ -164,6 +164,135 @@ jobs:
 	})
 }
 
+// TestExtractJobOrder tests that job order is correctly extracted from a workflow
+func TestExtractJobOrder(t *testing.T) {
+	t.Run("extracts job order correctly", func(t *testing.T) {
+		yamlContent := `name: Test Workflow
+jobs:
+  first:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo first
+  second:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo second
+  third:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo third
+`
+		tmpDir := t.TempDir()
+		workflowPath := filepath.Join(tmpDir, "test.yml")
+		if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		wf, err := LoadWorkflowFile(workflowPath)
+		if err != nil {
+			t.Fatalf("LoadWorkflowFile() error = %v", err)
+		}
+
+		if len(wf.JobOrder) != 3 {
+			t.Fatalf("len(JobOrder) = %d, want 3", len(wf.JobOrder))
+		}
+
+		expectedOrder := []string{"first", "second", "third"}
+		for i, jobID := range expectedOrder {
+			if wf.JobOrder[i] != jobID {
+				t.Errorf("JobOrder[%d] = %q, want %q", i, wf.JobOrder[i], jobID)
+			}
+		}
+	})
+
+	t.Run("handles workflow without jobs", func(t *testing.T) {
+		yamlContent := `name: Empty Workflow
+env:
+  VAR: value
+`
+		tmpDir := t.TempDir()
+		workflowPath := filepath.Join(tmpDir, "empty.yml")
+		if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		wf, err := LoadWorkflowFile(workflowPath)
+		if err != nil {
+			t.Fatalf("LoadWorkflowFile() error = %v", err)
+		}
+
+		if len(wf.JobOrder) != 0 {
+			t.Errorf("len(JobOrder) = %d, want 0", len(wf.JobOrder))
+		}
+	})
+
+	t.Run("handles malformed YAML with non-mapping jobs", func(t *testing.T) {
+		// This YAML has jobs as an array instead of a mapping
+		yamlContent := `name: Test Workflow
+jobs:
+  - job1
+  - job2
+`
+		tmpDir := t.TempDir()
+		workflowPath := filepath.Join(tmpDir, "malformed.yml")
+		if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		wf, err := LoadWorkflowFile(workflowPath)
+		// This should not error because YAML is technically valid, but jobs won't be parsed
+		if err != nil {
+			// This is acceptable if it errors
+			return
+		}
+
+		// If no error, JobOrder should be empty since jobs is not a mapping
+		if len(wf.JobOrder) > 0 {
+			t.Errorf("JobOrder should be empty for non-mapping jobs, got %v", wf.JobOrder)
+		}
+	})
+
+	t.Run("handles workflow with only single job", func(t *testing.T) {
+		yamlContent := `name: Single Job Workflow
+jobs:
+  single:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test
+`
+		tmpDir := t.TempDir()
+		workflowPath := filepath.Join(tmpDir, "single.yml")
+		if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		wf, err := LoadWorkflowFile(workflowPath)
+		if err != nil {
+			t.Fatalf("LoadWorkflowFile() error = %v", err)
+		}
+
+		if len(wf.JobOrder) != 1 || wf.JobOrder[0] != "single" {
+			t.Errorf("JobOrder = %v, want [\"single\"]", wf.JobOrder)
+		}
+	})
+
+	t.Run("handles YAML with non-mapping root", func(t *testing.T) {
+		// YAML that is just a scalar, not a mapping
+		yamlContent := `just a string`
+		tmpDir := t.TempDir()
+		workflowPath := filepath.Join(tmpDir, "scalar.yml")
+		if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		_, err := LoadWorkflowFile(workflowPath)
+		// This should error because it cannot decode a scalar as a WorkflowFile
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for scalar YAML, got nil")
+		}
+	})
+}
+
 // BenchmarkLoadWorkflowFile benchmarks the workflow file loading performance.
 func BenchmarkLoadWorkflowFile(b *testing.B) {
 	// Create a workflow with multiple jobs and steps to simulate realistic usage

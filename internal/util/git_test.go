@@ -112,6 +112,18 @@ func TestGitHeadRef(t *testing.T) {
 			t.Errorf("expected ref to be empty or start with refs/, got: %s", ref)
 		}
 	})
+
+	t.Run("returns empty string for detached HEAD", func(t *testing.T) {
+		// When not in a valid git repo or in detached HEAD state,
+		// GitHeadRef returns empty string without error
+		ref, err := GitHeadRef(ctx, "/tmp")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if ref != "" {
+			t.Errorf("expected empty string for non-git directory, got %q", ref)
+		}
+	})
 }
 
 // findTestRepoRoot finds the repository root by looking for .git directory

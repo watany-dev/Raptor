@@ -149,6 +149,43 @@ func TestParseEnvFile_NonExistentFile(t *testing.T) {
 	}
 }
 
+func TestParseEnvFile_PermissionDenied(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission test as root")
+	}
+
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, "env")
+	err := os.WriteFile(envFile, []byte("VAR=value"), 0000)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err = ParseEnvFile(envFile)
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for permission denied, got nil")
+	}
+}
+
+func TestParseEnvFile_InvalidEnvVarInMultiline(t *testing.T) {
+	// Create a file with blocked env var (LD_PRELOAD) in multiline format
+	content := `LD_PRELOAD<<EOF
+line1
+line2
+EOF`
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, "env")
+	err := os.WriteFile(envFile, []byte(content), 0644)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err = ParseEnvFile(envFile)
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for blocked env var LD_PRELOAD, got nil")
+	}
+}
+
 func TestParsePathFile(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -226,6 +263,24 @@ func TestParsePathFile_NonExistentFile(t *testing.T) {
 	}
 	if len(result) != 0 {
 		t.Errorf("expected empty slice for non-existent file, got %v", result)
+	}
+}
+
+func TestParsePathFile_PermissionDenied(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission test as root")
+	}
+
+	tmpDir := t.TempDir()
+	pathFile := filepath.Join(tmpDir, "path")
+	err := os.WriteFile(pathFile, []byte("/usr/bin\n/bin"), 0000)
+	if err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err = ParsePathFile(pathFile)
+	if err == nil {
+		t.Error("ParsePathFile() expected error for permission denied, got nil")
 	}
 }
 
