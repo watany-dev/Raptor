@@ -32,7 +32,7 @@ func run(args []string) error {
 
 	switch command {
 	case "run":
-		return runCommand(cmdArgs)
+		return runCommand(cmdArgs, false)
 	case "help", "-h", "--help":
 		cli.PrintHelp()
 		return nil
@@ -40,20 +40,34 @@ func run(args []string) error {
 		fmt.Printf("raptor %s (commit: %s, built: %s)\n", version, commit, date)
 		return nil
 	default:
+		// If command starts with "-", treat as flags for dry-run mode
+		if len(command) > 0 && command[0] == '-' {
+			return runCommand(args, true)
+		}
 		return fmt.Errorf("unknown command: %s", command)
 	}
 }
 
-func runCommand(args []string) error {
+func runCommand(args []string, forceDryRun bool) error {
 	opts, err := cli.ParseRunFlags(args)
 	if err != nil {
 		return err
+	}
+
+	// If called without "run" command, force dry-run mode
+	if forceDryRun {
+		opts.DryRun = true
 	}
 
 	runner := cli.NewRunner(executor.NewHostExecutor())
 	results, err := runner.Run(opts)
 	if err != nil {
 		return err
+	}
+
+	// In dry-run mode, no further checks needed
+	if opts.DryRun {
+		return nil
 	}
 
 	// Check for failures in any job

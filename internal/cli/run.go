@@ -72,9 +72,6 @@ type runContext struct {
 // If opts.Job is specified, only that job is executed.
 // If opts.Job is empty, all jobs in the workflow are executed.
 func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
-	// Print security warning
-	r.printSecurityWarning(opts)
-
 	ctx := context.Background()
 
 	// Load the workflow file
@@ -82,13 +79,6 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow: %w", err)
 	}
-
-	// Setup run context (worktree if isolate mode, or working directory otherwise)
-	runCtx, cleanup, err := r.setupRunContext(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	defer cleanup()
 
 	// Determine which jobs to run
 	var jobIDs []string
@@ -99,6 +89,21 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 		// Run all jobs in definition order
 		jobIDs = wf.JobOrder
 	}
+
+	// Dry-run mode: show what would be executed without running
+	if opts.DryRun {
+		return r.dryRun(wf, jobIDs, opts)
+	}
+
+	// Print security warning
+	r.printSecurityWarning(opts)
+
+	// Setup run context (worktree if isolate mode, or working directory otherwise)
+	runCtx, cleanup, err := r.setupRunContext(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 
 	var results []*RunResult
 	for _, jobID := range jobIDs {
@@ -444,4 +449,79 @@ func (r *Runner) printSecurityWarning(opts *RunOptions) {
 	fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
 	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 	fmt.Fprintln(r.stderr, "")
+}
+
+// dryRun shows what would be executed without actually running commands.
+func (r *Runner) dryRun(wf *workflow.WorkflowFile, jobIDs []string, opts *RunOptions) ([]*RunResult, error) {
+	fmt.Fprintln(r.stdout, "")
+	fmt.Fprintln(r.stdout, "🔍 DRY RUN MODE")
+	fmt.Fprintln(r.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintf(r.stdout, "Workflow: %s\n", opts.Workflow)
+	if wf.Name != "" {
+		fmt.Fprintf(r.stdout, "Name: %s\n", wf.Name)
+	}
+	fmt.Fprintln(r.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(r.stdout, "")
+
+	var results []*RunResult
+
+	for _, jobID := range jobIDs {
+		job, err := workflow.SelectJob(wf, jobID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to select job: %w", err)
+		}
+
+		fmt.Fprintf(r.stdout, "📋 Job: %s\n", jobID)
+		if job.Name != "" && job.Name != jobID {
+			fmt.Fprintf(r.stdout, "   Name: %s\n", job.Name)
+		}
+		if job.RunsOn != "" {
+			fmt.Fprintf(r.stdout, "   Runs-on: %s\n", job.RunsOn)
+		}
+		fmt.Fprintln(r.stdout, "")
+
+		result := &RunResult{
+			JobID:       jobID,
+			Success:     true,
+			StepResults: make([]StepResult, 0, len(job.Steps)),
+		}
+
+		for i, step := range job.Steps {
+			stepName := step.Name
+			if stepName == "" {
+				stepName = fmt.Sprintf("Step %d", i+1)
+			}
+
+			fmt.Fprintf(r.stdout, "   [%d] %s\n", i+1, stepName)
+			if step.WorkingDirectory != "" {
+				fmt.Fprintf(r.stdout, "       Working directory: %s\n", step.WorkingDirectory)
+			}
+			if len(step.Env) > 0 {
+				fmt.Fprintf(r.stdout, "       Environment: %d variable(s)\n", len(step.Env))
+			}
+			if step.Run != "" {
+				// Show the command, indented
+				lines := strings.Split(strings.TrimSpace(step.Run), "\n")
+				fmt.Fprintln(r.stdout, "       Command:")
+				for _, line := range lines {
+					fmt.Fprintf(r.stdout, "         %s\n", line)
+				}
+			}
+			fmt.Fprintln(r.stdout, "")
+
+			result.StepResults = append(result.StepResults, StepResult{
+				StepIndex: i,
+				StepName:  stepName,
+				ExitCode:  0,
+			})
+		}
+
+		results = append(results, result)
+	}
+
+	fmt.Fprintln(r.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	fmt.Fprintln(r.stdout, "To execute this workflow, use: raptor run -w", opts.Workflow)
+	fmt.Fprintln(r.stdout, "")
+
+	return results, nil
 }
