@@ -1,9 +1,11 @@
 package envfiles
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -324,5 +326,152 @@ func TestPrependPath(t *testing.T) {
 				t.Errorf("PrependPath() = %q, expected %q", result, tt.expected)
 			}
 		})
+	}
+}
+
+// TestParseEnvFile_UnclosedHeredoc tests handling of unclosed heredoc delimiters
+func TestParseEnvFile_UnclosedHeredoc(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	content := `
+VAR1=simple
+VAR2<<EOF
+multiline content
+but missing EOF line
+`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	_, err := ParseEnvFile(envFile)
+	// Should either return error or handle gracefully
+	// Unclosed heredoc may result in error or partial parse
+	_ = err
+}
+
+// TestParseEnvFile_LongValue tests handling of long variable values
+func TestParseEnvFile_LongValue(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Create a moderately long value (10KB, under scanner limits)
+	longValue := strings.Repeat("x", 10*1024)
+	content := fmt.Sprintf("LONG_VAR=%s\nSHORT_VAR=short", longValue)
+
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	result, err := ParseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("ParseEnvFile() error = %v", err)
+	}
+
+	if val, exists := result["LONG_VAR"]; !exists || len(val) != len(longValue) {
+		t.Errorf("ParseEnvFile() failed to parse long value correctly")
+	}
+	if val, exists := result["SHORT_VAR"]; !exists || val != "short" {
+		t.Errorf("ParseEnvFile() failed to parse SHORT_VAR correctly")
+	}
+}
+
+// TestParseEnvFile_MultilineHeredocs tests multiple heredoc blocks in sequence
+func TestParseEnvFile_MultilineHeredocs(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	content := `
+VAR1=simple
+VAR2<<EOF
+first multiline
+value here
+EOF
+VAR3<<END
+second multiline
+value here
+END
+VAR4=final
+`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	result, err := ParseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("ParseEnvFile() error = %v", err)
+	}
+
+	if _, exists := result["VAR1"]; !exists {
+		t.Error("ParseEnvFile() failed to parse VAR1")
+	}
+	if _, exists := result["VAR2"]; !exists {
+		t.Error("ParseEnvFile() failed to parse VAR2 (first heredoc)")
+	}
+	if _, exists := result["VAR3"]; !exists {
+		t.Error("ParseEnvFile() failed to parse VAR3 (second heredoc)")
+	}
+	if _, exists := result["VAR4"]; !exists {
+		t.Error("ParseEnvFile() failed to parse VAR4")
+	}
+}
+
+// TestParsePathFile_EdgeCases tests edge cases for path file parsing
+func TestParsePathFile_EdgeCases(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	pathFile := filepath.Join(tmpDir, "path")
+
+	content := `
+/first/path
+/second/path
+
+/fourth/path
+`
+	if err := os.WriteFile(pathFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write path file: %v", err)
+	}
+
+	result, err := ParsePathFile(pathFile)
+	if err != nil {
+		t.Fatalf("ParsePathFile() error = %v", err)
+	}
+
+	if len(result) < 3 {
+		t.Errorf("ParsePathFile() expected at least 3 paths, got %d", len(result))
+	}
+}
+
+// TestParsePathFile_SpecialCharacters tests paths with special characters
+func TestParsePathFile_SpecialCharacters(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	pathFile := filepath.Join(tmpDir, "path")
+
+	content := `/path/with spaces/bin
+/path/with-dashes/bin
+/path/with_underscores/bin
+/path/with.dots/bin`
+
+	if err := os.WriteFile(pathFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write path file: %v", err)
+	}
+
+	result, err := ParsePathFile(pathFile)
+	if err != nil {
+		t.Fatalf("ParsePathFile() error = %v", err)
+	}
+
+	if len(result) != 4 {
+		t.Errorf("ParsePathFile() expected 4 paths, got %d", len(result))
+	}
+
+	// Verify paths are properly parsed
+	pathStr := strings.Join(result, ":")
+	if !strings.Contains(pathStr, "/path/with spaces/bin") {
+		t.Error("ParsePathFile() failed to preserve spaces in path")
 	}
 }

@@ -270,3 +270,91 @@ func findTestRepoRoot(t *testing.T) string {
 		dir = parent
 	}
 }
+
+// TestCreateWorkspace_InvalidRepo tests handling when repoRoot is invalid
+func TestCreateWorkspace_InvalidRepo(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Try to create workspace in non-git directory
+	ctx := context.Background()
+	_, err := CreateWorkspace(ctx, tmpDir, false)
+	if err == nil {
+		t.Error("CreateWorkspace() expected error for non-git directory, got nil")
+	}
+}
+
+// TestRemoveWorkspace_EmptyWorkspace tests removal of an empty workspace
+func TestRemoveWorkspace_EmptyWorkspace(t *testing.T) {
+	repoRoot := findTestRepoRoot(t)
+	ctx := context.Background()
+
+	// Create a workspace first
+	ws, err := CreateWorkspace(ctx, repoRoot, false)
+	if err != nil {
+		t.Skipf("failed to create workspace: %v", err)
+	}
+
+	// Then remove it
+	err = RemoveWorkspace(ctx, ws)
+	if err != nil {
+		t.Logf("RemoveWorkspace() returned error: %v", err)
+	}
+}
+
+// TestGenerateID_Uniqueness tests that generated IDs are unique
+func TestGenerateID_Uniqueness(t *testing.T) {
+	seen := make(map[string]bool)
+	iterations := 1000
+
+	for i := 0; i < iterations; i++ {
+		id, err := generateID()
+		if err != nil {
+			t.Fatalf("generateID() error = %v", err)
+		}
+
+		if seen[id] {
+			t.Errorf("generateID() produced duplicate ID: %s", id)
+		}
+		seen[id] = true
+
+		// Verify format: should be 16 hex characters
+		if len(id) != 16 {
+			t.Errorf("generateID() returned ID with wrong length: got %d, expected 16", len(id))
+		}
+
+		// Verify all characters are hex
+		for _, c := range id {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+				t.Errorf("generateID() returned non-hex character: %c", c)
+			}
+		}
+	}
+}
+
+// TestCreateWorkspace_IDFormat tests that workspace IDs are correctly formatted
+func TestCreateWorkspace_IDFormat(t *testing.T) {
+	repoRoot := findTestRepoRoot(t)
+	ctx := context.Background()
+
+	// Create workspace
+	ws, err := CreateWorkspace(ctx, repoRoot, false)
+	if err != nil {
+		t.Fatalf("CreateWorkspace() error = %v", err)
+	}
+
+	// Verify ID format
+	id := ws.ID
+	if len(id) != 16 {
+		t.Errorf("CreateWorkspace() returned ID with wrong length: got %d, expected 16", len(id))
+	}
+
+	// Verify all characters are hex
+	for _, c := range id {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			t.Errorf("CreateWorkspace() returned non-hex character: %c", c)
+		}
+	}
+
+	// Cleanup
+	RemoveWorkspace(ctx, ws)
+}

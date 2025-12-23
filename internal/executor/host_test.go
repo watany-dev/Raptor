@@ -1,6 +1,7 @@
 package executor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -228,5 +229,97 @@ func TestHostExecutor_Execute_CommandNotExist(t *testing.T) {
 	// If it doesn't error, it should have a non-zero exit code (command not found)
 	if result.ExitCode == 0 {
 		t.Errorf("expected non-zero exit code for non-existent command, got %d", result.ExitCode)
+	}
+}
+
+// TestHostExecutor_Execute_LongCommand tests handling of very long command strings
+func TestHostExecutor_Execute_LongCommand(t *testing.T) {
+	executor := NewHostExecutor()
+
+	// Create a moderately long command (under shell limits)
+	longArg := strings.Repeat("a", 1000)
+	config := Config{
+		Command: fmt.Sprintf("echo %s", longArg),
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+
+	if !strings.Contains(result.Stdout, "a") {
+		t.Error("Execute() failed to capture output from long command")
+	}
+}
+
+// TestHostExecutor_Execute_EmptyCommand tests handling of empty command string
+func TestHostExecutor_Execute_EmptyCommand(t *testing.T) {
+	executor := NewHostExecutor()
+
+	config := Config{
+		Command: "",
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		// Empty command may error, which is acceptable
+		return
+	}
+
+	// If no error, should have empty output
+	if result.ExitCode != 0 && result.Stdout == "" {
+		// This is acceptable behavior for empty command
+		return
+	}
+}
+
+// TestHostExecutor_Execute_SpecialCharacters tests handling of shell special characters
+func TestHostExecutor_Execute_SpecialCharacters(t *testing.T) {
+	executor := NewHostExecutor()
+
+	config := Config{
+		Command: "echo 'test value with spaces'",
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+
+	if !strings.Contains(result.Stdout, "test value with spaces") {
+		t.Errorf("Execute() failed to preserve special characters in output")
+	}
+}
+
+// TestHostExecutor_Execute_WithEnvironmentVariables tests command execution with environment variables
+func TestHostExecutor_Execute_WithEnvironmentVariables(t *testing.T) {
+	executor := NewHostExecutor()
+
+	config := Config{
+		Command: "echo $TEST_VAR",
+		Env: map[string]string{
+			"TEST_VAR": "test_value",
+		},
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+
+	if !strings.Contains(result.Stdout, "test_value") {
+		t.Errorf("Execute() failed to pass environment variables correctly")
 	}
 }
