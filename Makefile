@@ -1,7 +1,7 @@
 # Raptor Makefile
 # Provides standardized build commands for development
 
-.PHONY: all build test lint fmt coverage clean check help
+.PHONY: all build test lint fmt coverage clean check vuln help
 
 # Default target
 all: check build
@@ -47,6 +47,10 @@ fmt-check:
 # Run all checks (lint + test)
 check: lint test
 
+# Run vulnerability check
+vuln:
+	govulncheck ./...
+
 # Clean build artifacts
 clean:
 	rm -rf bin/
@@ -57,6 +61,7 @@ clean:
 tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/tools/cmd/goimports@latest
+	go install golang.org/x/vuln/cmd/govulncheck@latest
 
 # Run the application
 run:
@@ -80,6 +85,7 @@ help:
 	@echo "  fmt          Format code with gofmt and goimports"
 	@echo "  fmt-check    Verify code is formatted"
 	@echo "  check        Run lint and test"
+	@echo "  vuln         Run govulncheck for vulnerabilities"
 	@echo "  clean        Clean build artifacts"
 	@echo "  tools        Install development tools"
 	@echo "  run          Run the application (use ARGS= for arguments)"
