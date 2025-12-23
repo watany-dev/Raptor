@@ -475,3 +475,128 @@ func TestParsePathFile_SpecialCharacters(t *testing.T) {
 		t.Error("ParsePathFile() failed to preserve spaces in path")
 	}
 }
+
+// TestParseEnvFile_InvalidEnvVarName tests handling of invalid env var names
+func TestParseEnvFile_InvalidEnvVarName(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Test with blocked env var name in simple format
+	content := `LD_PRELOAD=/malicious/path`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	_, err := ParseEnvFile(envFile)
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for blocked env var LD_PRELOAD")
+	}
+}
+
+// TestParseEnvFile_HeredocValueValidation tests heredoc value validation
+func TestParseEnvFile_HeredocValueValidation(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Test with valid heredoc value
+	content := `NORMAL_VAR<<EOF
+just some text
+with multiple lines
+EOF`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	result, err := ParseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("ParseEnvFile() error = %v", err)
+	}
+
+	expected := "just some text\nwith multiple lines"
+	if result["NORMAL_VAR"] != expected {
+		t.Errorf("NORMAL_VAR = %q, want %q", result["NORMAL_VAR"], expected)
+	}
+}
+
+// TestParseEnvFile_LineWithoutEquals tests handling of lines without equals sign
+func TestParseEnvFile_LineWithoutEquals(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Line without equals sign should be ignored
+	content := `VAR1=value1
+just some text without equals
+VAR2=value2`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	result, err := ParseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("ParseEnvFile() error = %v", err)
+	}
+
+	if result["VAR1"] != "value1" {
+		t.Errorf("VAR1 = %q, want %q", result["VAR1"], "value1")
+	}
+	if result["VAR2"] != "value2" {
+		t.Errorf("VAR2 = %q, want %q", result["VAR2"], "value2")
+	}
+	// The line without equals should not create any entry
+	if len(result) != 2 {
+		t.Errorf("Expected 2 entries, got %d", len(result))
+	}
+}
+
+// TestParseEnvFile_WhitespaceHandling tests whitespace handling
+func TestParseEnvFile_WhitespaceHandling(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Test whitespace handling around key names
+	content := `  SPACES_BEFORE  =value
+TRAILING_SPACES=value
+  BOTH_SIDES  =value`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	result, err := ParseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("ParseEnvFile() error = %v", err)
+	}
+
+	// Key should have spaces trimmed
+	if _, ok := result["SPACES_BEFORE"]; !ok {
+		t.Error("SPACES_BEFORE should be present (with trimmed key)")
+	}
+}
+
+// TestPrependPath_EmptyNewPaths tests PrependPath with empty new paths
+func TestPrependPath_EmptyNewPaths(t *testing.T) {
+	result := PrependPath("/usr/bin:/bin", []string{})
+	if result != "/usr/bin:/bin" {
+		t.Errorf("PrependPath with empty new paths = %q, want %q", result, "/usr/bin:/bin")
+	}
+}
+
+// TestPrependPath_EmptyCurrentPath tests PrependPath with empty current path
+func TestPrependPath_EmptyCurrentPath(t *testing.T) {
+	result := PrependPath("", []string{"/new/path"})
+	if result != "/new/path" {
+		t.Errorf("PrependPath with empty current path = %q, want %q", result, "/new/path")
+	}
+}
+
+// TestPrependPath_MultipleNewPaths tests PrependPath with multiple new paths
+func TestPrependPath_MultipleNewPaths(t *testing.T) {
+	result := PrependPath("/existing", []string{"/first", "/second", "/third"})
+	expected := "/first:/second:/third:/existing"
+	if result != expected {
+		t.Errorf("PrependPath = %q, want %q", result, expected)
+	}
+}

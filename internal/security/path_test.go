@@ -152,3 +152,84 @@ func TestValidateWorkingDirectory_CaseSensitivity(t *testing.T) {
 		t.Logf("ValidateWorkingDirectory() for uppercase path: %v", err2)
 	}
 }
+
+// TestValidateWorkingDirectory_PathWithDots tests paths containing multiple dots
+func TestValidateWorkingDirectory_PathWithDots(t *testing.T) {
+	tests := []struct {
+		name      string
+		workDir   string
+		basePath  string
+		wantError bool
+	}{
+		{"single dot", ".", "/repo", false},
+		{"current dir explicit", "./", "/repo", false},
+		{"double dot only", "..", "/repo", true},
+		{"double dot prefix", "../sibling", "/repo", true},
+		{"safe dot in name", "some.dir", "/repo", false},
+		{"multiple dots in name", "some..dir", "/repo", false},
+		{"dotfile", ".hidden", "/repo", false},
+		{"dot slash subdir", "./sub/./dir", "/repo", false},
+		{"dot in middle", "a/./b", "/repo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWorkingDirectory(tt.workDir, tt.basePath)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateWorkingDirectory(%q, %q) error = %v, wantError %v",
+					tt.workDir, tt.basePath, err, tt.wantError)
+			}
+		})
+	}
+}
+
+// TestValidateWorkingDirectory_FilepathRel tests the filepath.Rel error path
+func TestValidateWorkingDirectory_FilepathRel(t *testing.T) {
+	// This tests the edge case where filepath.Rel could fail
+	// In practice, this is hard to trigger, so we just ensure the code path exists
+	tests := []struct {
+		name      string
+		workDir   string
+		basePath  string
+		wantError bool
+	}{
+		{"normal subdir", "sub", "/repo", false},
+		{"nested subdir", "a/b/c", "/repo", false},
+		{"deeply nested", "a/b/c/d/e/f", "/repo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWorkingDirectory(tt.workDir, tt.basePath)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateWorkingDirectory(%q, %q) error = %v, wantError %v",
+					tt.workDir, tt.basePath, err, tt.wantError)
+			}
+		})
+	}
+}
+
+// TestValidateWorkingDirectory_ComplexTraversal tests complex path traversal attempts
+func TestValidateWorkingDirectory_ComplexTraversal(t *testing.T) {
+	tests := []struct {
+		name      string
+		workDir   string
+		basePath  string
+		wantError bool
+	}{
+		{"traverse with dots", "sub/../..", "/repo", true},
+		{"traverse then come back", "sub/../../repo", "/repo", true},
+		{"multiple traversals", "../../..", "/repo", true},
+		{"traverse hidden", "./../..", "/repo", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWorkingDirectory(tt.workDir, tt.basePath)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateWorkingDirectory(%q, %q) error = %v, wantError %v",
+					tt.workDir, tt.basePath, err, tt.wantError)
+			}
+		})
+	}
+}

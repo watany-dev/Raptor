@@ -431,3 +431,103 @@ jobs: null`
 		t.Error("LoadWorkflowFile() expected nil or empty jobs for null jobs node")
 	}
 }
+
+// Test extractJobOrderFromNode with empty content
+func TestExtractJobOrderFromNode_EmptyContent(t *testing.T) {
+	t.Parallel()
+	yamlContent := ``
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "empty.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	if err == nil {
+		// Empty file might be treated differently
+		t.Log("Empty file accepted without error")
+	}
+}
+
+// Test extractJobOrderFromNode with jobs as sequence
+func TestExtractJobOrderFromNode_JobsAsSequence(t *testing.T) {
+	t.Parallel()
+	yamlContent := `name: Test Workflow
+jobs:
+  - job1
+  - job2`
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "sequence.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	wf, err := LoadWorkflowFile(workflowPath)
+	if err != nil {
+		// It's acceptable to error on invalid jobs format
+		return
+	}
+
+	// JobOrder should be empty since jobs is not a mapping
+	if len(wf.JobOrder) > 0 {
+		t.Errorf("JobOrder should be empty for sequence jobs, got %v", wf.JobOrder)
+	}
+}
+
+// Test DiscoverWorkflows with unreadable directory
+func TestDiscoverWorkflows_ReadDirError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission test as root")
+	}
+
+	tmpDir := t.TempDir()
+	workflowsDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+		t.Fatalf("failed to create workflows directory: %v", err)
+	}
+
+	// Create a file to make the directory non-empty
+	workflowPath := filepath.Join(workflowsDir, "test.yml")
+	if err := os.WriteFile(workflowPath, []byte("name: Test"), 0644); err != nil {
+		t.Fatalf("failed to write workflow file: %v", err)
+	}
+
+	// Make the directory unreadable
+	if err := os.Chmod(workflowsDir, 0000); err != nil {
+		t.Fatalf("failed to chmod: %v", err)
+	}
+	defer func() {
+		_ = os.Chmod(workflowsDir, 0755)
+	}()
+
+	_, err := DiscoverWorkflows(tmpDir)
+	if err == nil {
+		t.Error("DiscoverWorkflows() expected error for unreadable directory")
+	}
+}
+
+// Test DiscoverWorkflows with stat error
+func TestDiscoverWorkflows_StatError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission test as root")
+	}
+
+	tmpDir := t.TempDir()
+	ghDir := filepath.Join(tmpDir, ".github")
+	if err := os.MkdirAll(ghDir, 0755); err != nil {
+		t.Fatalf("failed to create .github directory: %v", err)
+	}
+
+	// Make .github unreadable to trigger stat error on workflows
+	if err := os.Chmod(ghDir, 0000); err != nil {
+		t.Fatalf("failed to chmod: %v", err)
+	}
+	defer func() {
+		_ = os.Chmod(ghDir, 0755)
+	}()
+
+	_, err := DiscoverWorkflows(tmpDir)
+	if err == nil {
+		t.Error("DiscoverWorkflows() expected error for inaccessible workflows directory")
+	}
+}

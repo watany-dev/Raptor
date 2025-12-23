@@ -173,3 +173,62 @@ func TestPrintHelp(t *testing.T) {
 	// Just verify it doesn't panic
 	PrintHelp()
 }
+
+// TestParseRunFlags_DryRunFlag tests the dry-run flag
+func TestParseRunFlags_DryRunFlag(t *testing.T) {
+	tests := []struct {
+		name       string
+		args       []string
+		wantDryRun bool
+	}{
+		{
+			name:       "long form --dry-run",
+			args:       []string{"--workflow", "ci.yml", "--dry-run"},
+			wantDryRun: true,
+		},
+		{
+			name:       "short form -n",
+			args:       []string{"-w", "ci.yml", "-n"},
+			wantDryRun: true,
+		},
+		{
+			name:       "without dry-run",
+			args:       []string{"-w", "ci.yml"},
+			wantDryRun: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := ParseRunFlags(tt.args)
+			if err != nil {
+				t.Fatalf("ParseRunFlags() error = %v", err)
+			}
+			if opts.DryRun != tt.wantDryRun {
+				t.Errorf("DryRun = %v, want %v", opts.DryRun, tt.wantDryRun)
+			}
+		})
+	}
+}
+
+// TestParseRunFlags_FlagParseError tests flag parsing errors
+func TestParseRunFlags_FlagParseError(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "invalid flag",
+			args: []string{"--invalid-flag-that-does-not-exist"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseRunFlags(tt.args)
+			if err == nil {
+				t.Error("ParseRunFlags() expected error for invalid flag")
+			}
+		})
+	}
+}

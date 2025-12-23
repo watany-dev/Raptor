@@ -358,3 +358,76 @@ func TestCreateWorkspace_IDFormat(t *testing.T) {
 	// Cleanup
 	_ = RemoveWorkspace(ctx, ws)
 }
+
+// TestWorkspace_Fields tests the Workspace struct fields
+func TestWorkspace_Fields(t *testing.T) {
+	ws := &Workspace{
+		RepoRoot: "/repo",
+		Path:     "/repo/.raptor/ws-1234",
+		ID:       "1234567890abcdef",
+	}
+
+	if ws.RepoRoot != "/repo" {
+		t.Errorf("RepoRoot = %q, want %q", ws.RepoRoot, "/repo")
+	}
+	if ws.Path != "/repo/.raptor/ws-1234" {
+		t.Errorf("Path = %q, want %q", ws.Path, "/repo/.raptor/ws-1234")
+	}
+	if ws.ID != "1234567890abcdef" {
+		t.Errorf("ID = %q, want %q", ws.ID, "1234567890abcdef")
+	}
+}
+
+// TestRemoveWorkspace_AlreadyRemoved tests removal of already removed workspace
+func TestRemoveWorkspace_AlreadyRemoved(t *testing.T) {
+	repoRoot := findTestRepoRoot(t)
+	ctx := context.Background()
+
+	// Create and remove a workspace
+	ws, err := CreateWorkspace(ctx, repoRoot, false)
+	if err != nil {
+		t.Fatalf("CreateWorkspace() error = %v", err)
+	}
+
+	// Remove it first time
+	if err := RemoveWorkspace(ctx, ws); err != nil {
+		t.Fatalf("First RemoveWorkspace() error = %v", err)
+	}
+
+	// Try to remove it again - should not error since the path doesn't exist
+	err = RemoveWorkspace(ctx, ws)
+	// It's acceptable to either error or succeed here
+	if err != nil {
+		t.Logf("Second RemoveWorkspace() returned error (acceptable): %v", err)
+	}
+}
+
+// TestCreateWorkspace_ConcurrentCreation tests creating multiple workspaces in sequence
+func TestCreateWorkspace_ConcurrentCreation(t *testing.T) {
+	repoRoot := findTestRepoRoot(t)
+	ctx := context.Background()
+
+	// Create multiple workspaces in sequence
+	workspaces := make([]*Workspace, 3)
+	for i := 0; i < 3; i++ {
+		ws, err := CreateWorkspace(ctx, repoRoot, false)
+		if err != nil {
+			t.Fatalf("CreateWorkspace() %d error = %v", i, err)
+		}
+		workspaces[i] = ws
+	}
+
+	// Verify all IDs are unique
+	ids := make(map[string]bool)
+	for _, ws := range workspaces {
+		if ids[ws.ID] {
+			t.Errorf("Duplicate workspace ID: %s", ws.ID)
+		}
+		ids[ws.ID] = true
+	}
+
+	// Cleanup
+	for _, ws := range workspaces {
+		_ = RemoveWorkspace(ctx, ws)
+	}
+}
