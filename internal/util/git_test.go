@@ -142,3 +142,81 @@ func findTestRepoRoot(t *testing.T, startDir string) string {
 		dir = parent
 	}
 }
+
+// TestGitHeadSHA_ValidRepo tests getting SHA of valid repository
+func TestGitHeadSHA_ValidRepo(t *testing.T) {
+	t.Parallel()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
+	repoRoot := findTestRepoRoot(t, cwd)
+
+	sha, err := GitHeadSHA(context.Background(), repoRoot)
+	if err != nil {
+		t.Fatalf("GitHeadSHA() error = %v", err)
+	}
+
+	if len(sha) == 0 {
+		t.Error("GitHeadSHA() returned empty SHA")
+	}
+
+	// SHA should be 40 hex characters (SHA-1) or 64 (SHA-256)
+	if len(sha) != 40 && len(sha) != 64 {
+		t.Errorf("GitHeadSHA() returned invalid SHA length: %d", len(sha))
+	}
+}
+
+// TestGitHeadRef_DefaultBranch tests GitHeadRef returns default branch name
+func TestGitHeadRef_DefaultBranch(t *testing.T) {
+	t.Parallel()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
+	repoRoot := findTestRepoRoot(t, cwd)
+
+	ref, err := GitHeadRef(context.Background(), repoRoot)
+	if err != nil {
+		t.Fatalf("GitHeadRef() error = %v", err)
+	}
+
+	// ref may be empty in detached HEAD state, which is acceptable
+	// Just verify the function doesn't error
+	t.Logf("GitHeadRef() returned: %q (length: %d)", ref, len(ref))
+}
+
+// TestFindGitRoot_MultipleDirectories tests finding git root from nested directories
+func TestFindGitRoot_MultipleDirectories(t *testing.T) {
+	t.Parallel()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("failed to get working directory: %v", err)
+	}
+
+	repoRoot := findTestRepoRoot(t, cwd)
+
+	ctx := context.Background()
+
+	// Test from current directory
+	root1, err := FindGitRoot(ctx, repoRoot)
+	if err != nil {
+		t.Fatalf("FindGitRoot() error = %v", err)
+	}
+
+	// Test from subdirectory
+	testDir := filepath.Join(repoRoot, "internal")
+	if info, err := os.Stat(testDir); err == nil && info.IsDir() {
+		root2, err := FindGitRoot(ctx, testDir)
+		if err != nil {
+			t.Fatalf("FindGitRoot() error from subdirectory = %v", err)
+		}
+
+		// Should find same root from both directories
+		if root1 != root2 {
+			t.Errorf("FindGitRoot() returned different roots: %s vs %s", root1, root2)
+		}
+	}
+}

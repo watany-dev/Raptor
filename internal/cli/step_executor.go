@@ -17,13 +17,13 @@ import (
 
 // StepExecutor handles the execution of individual workflow steps.
 type StepExecutor struct {
-	executor      executor.Executor
-	evaluator     *expression.ConditionEvaluator
-	stdout        io.Writer
-	stderr        io.Writer
-	workDir       string
-	envFilePath   string
-	pathFilePath  string
+	executor     executor.Executor
+	evaluator    *expression.ConditionEvaluator
+	stdout       io.Writer
+	stderr       io.Writer
+	workDir      string
+	envFilePath  string
+	pathFilePath string
 }
 
 // NewStepExecutor creates a new StepExecutor.
@@ -35,13 +35,13 @@ func NewStepExecutor(
 	envFilePath, pathFilePath string,
 ) *StepExecutor {
 	return &StepExecutor{
-		executor:      exec,
-		evaluator:     evaluator,
-		stdout:        stdout,
-		stderr:        stderr,
-		workDir:       workDir,
-		envFilePath:   envFilePath,
-		pathFilePath:  pathFilePath,
+		executor:     exec,
+		evaluator:    evaluator,
+		stdout:       stdout,
+		stderr:       stderr,
+		workDir:      workDir,
+		envFilePath:  envFilePath,
+		pathFilePath: pathFilePath,
 	}
 }
 

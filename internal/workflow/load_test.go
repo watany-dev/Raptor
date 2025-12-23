@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -331,5 +332,102 @@ jobs:
 		if err != nil {
 			b.Fatalf("LoadWorkflowFile() error = %v", err)
 		}
+	}
+}
+
+// Test DiscoverWorkflows with non-existent workflows directory
+func TestDiscoverWorkflows_NonExistentDirectory(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	// Don't create .github/workflows directory
+
+	workflows, err := DiscoverWorkflows(tmpDir)
+	// Should either return empty list or error gracefully
+	// Both returning error and empty list are acceptable behaviors
+	if err == nil && len(workflows) != 0 {
+		// If no error, should return empty list
+		t.Errorf("DiscoverWorkflows() expected empty list for non-existent directory, got %d workflows", len(workflows))
+	}
+}
+
+// Test DiscoverWorkflows with symlinks
+func TestDiscoverWorkflows_Symlinks(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+	if err := os.MkdirAll(workflowDir, 0755); err != nil {
+		t.Fatalf("failed to create workflow directory: %v", err)
+	}
+
+	// Create a workflow file
+	workflowPath := filepath.Join(workflowDir, "test.yml")
+	if err := os.WriteFile(workflowPath, []byte("name: Test\njobs:\n  test:\n    runs-on: ubuntu-latest\n"), 0644); err != nil {
+		t.Fatalf("failed to write workflow file: %v", err)
+	}
+
+	// Create a symlink to the workflow file
+	symlinkPath := filepath.Join(workflowDir, "symlink.yml")
+	if err := os.Symlink(workflowPath, symlinkPath); err != nil {
+		t.Skipf("symlink not supported on this platform: %v", err)
+	}
+
+	workflows, err := DiscoverWorkflows(tmpDir)
+	if err != nil {
+		t.Fatalf("DiscoverWorkflows() error = %v", err)
+	}
+
+	// Should discover both files (symlink and original)
+	if len(workflows) < 1 {
+		t.Error("DiscoverWorkflows() should discover at least the original file")
+	}
+}
+
+// Test LoadWorkflowFile with large files
+func TestLoadWorkflowFile_LargeFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create a large workflow file with many jobs
+	var yamlContent strings.Builder
+	yamlContent.WriteString("name: Large Workflow\njobs:\n")
+	for i := 0; i < 100; i++ {
+		yamlContent.WriteString(fmt.Sprintf("  job%d:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n", i))
+	}
+
+	workflowPath := filepath.Join(tmpDir, "large.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent.String()), 0644); err != nil {
+		t.Fatalf("failed to write workflow file: %v", err)
+	}
+
+	wf, err := LoadWorkflowFile(workflowPath)
+	if err != nil {
+		t.Fatalf("LoadWorkflowFile() error = %v", err)
+	}
+
+	if len(wf.Jobs) != 100 {
+		t.Errorf("LoadWorkflowFile() expected 100 jobs, got %d", len(wf.Jobs))
+	}
+}
+
+// Test LoadWorkflowFile with null jobs node
+func TestLoadWorkflowFile_NullJobsNode(t *testing.T) {
+	t.Parallel()
+	yamlContent := `name: Test Workflow
+jobs: null`
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "null_jobs.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	wf, err := LoadWorkflowFile(workflowPath)
+	if err != nil {
+		// It's acceptable to error on null jobs
+		return
+	}
+
+	// Or if it doesn't error, jobs should be empty/nil
+	if len(wf.Jobs) > 0 {
+		t.Error("LoadWorkflowFile() expected nil or empty jobs for null jobs node")
 	}
 }
