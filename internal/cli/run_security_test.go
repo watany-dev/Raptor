@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,7 +13,7 @@ import (
 func TestRunWithAbsolutePathBlocked(t *testing.T) {
 	// Create a temporary git repository
 	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	setupTestGitRepo(t, tmpDir)
 
 	// Create a workflow with malicious absolute path
 	workflowContent := `
@@ -60,7 +59,7 @@ jobs:
 func TestRunWithPathTraversalBlocked(t *testing.T) {
 	// Create a temporary git repository
 	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	setupTestGitRepo(t, tmpDir)
 
 	// Create a workflow with path traversal attempt
 	workflowContent := `
@@ -106,7 +105,7 @@ jobs:
 func TestRunWithValidRelativePath(t *testing.T) {
 	// Create a temporary git repository
 	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	setupTestGitRepo(t, tmpDir)
 
 	// Create subdirectory
 	subDir := filepath.Join(tmpDir, "subdir")
@@ -204,7 +203,7 @@ jobs:
 func TestRunWithNestedRelativePath(t *testing.T) {
 	// Create a temporary git repository
 	tmpDir := t.TempDir()
-	initGitRepo(t, tmpDir)
+	setupTestGitRepo(t, tmpDir)
 
 	// Create nested subdirectory
 	nestedDir := filepath.Join(tmpDir, "a", "b", "c")
@@ -250,46 +249,3 @@ jobs:
 	}
 }
 
-func initGitRepo(t *testing.T, dir string) {
-	t.Helper()
-	cmd := exec.Command("git", "init")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test User", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=Test User", "GIT_COMMITTER_EMAIL=test@test.com")
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to init git repo: %v", err)
-	}
-
-	// Configure git user for the repo
-	cmd = exec.Command("git", "config", "user.email", "test@test.com")
-	cmd.Dir = dir
-	_ = cmd.Run()
-
-	cmd = exec.Command("git", "config", "user.name", "Test User")
-	cmd.Dir = dir
-	_ = cmd.Run()
-
-	// Disable GPG signing for tests
-	cmd = exec.Command("git", "config", "commit.gpgsign", "false")
-	cmd.Dir = dir
-	_ = cmd.Run()
-
-	// Create an initial commit so worktree can be created
-	dummyFile := filepath.Join(dir, "dummy.txt")
-	if err := os.WriteFile(dummyFile, []byte("dummy"), 0644); err != nil {
-		t.Fatalf("Failed to write dummy file: %v", err)
-	}
-
-	cmd = exec.Command("git", "add", ".")
-	cmd.Dir = dir
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("Failed to git add: %v", err)
-	}
-
-	cmd = exec.Command("git", "-c", "user.name=Test User", "-c", "user.email=test@test.com", "commit", "-m", "initial")
-	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=Test User", "GIT_AUTHOR_EMAIL=test@test.com", "GIT_COMMITTER_NAME=Test User", "GIT_COMMITTER_EMAIL=test@test.com")
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("Failed to git commit: %v, output: %s", err, string(output))
-	}
-}
