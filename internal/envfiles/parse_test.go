@@ -197,7 +197,7 @@ func TestParsePathFile(t *testing.T) {
 		{
 			name:     "empty file",
 			content:  "",
-			expected: nil,
+			expected: []string{},
 		},
 		{
 			name:     "single path",

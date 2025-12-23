@@ -299,14 +299,15 @@ jobs:
 // BenchmarkLoadWorkflowFile benchmarks the workflow file loading performance.
 func BenchmarkLoadWorkflowFile(b *testing.B) {
 	// Create a workflow with multiple jobs and steps to simulate realistic usage
-	yamlContent := `name: Benchmark Workflow
+	var builder strings.Builder
+	builder.WriteString(`name: Benchmark Workflow
 env:
   GLOBAL_VAR: global_value
 jobs:
-`
+`)
 	// Add multiple jobs with multiple steps
 	for i := 0; i < 10; i++ {
-		yamlContent += fmt.Sprintf(`  job%d:
+		fmt.Fprintf(&builder, `  job%d:
     name: Job %d
     runs-on: ubuntu-latest
     env:
@@ -314,13 +315,14 @@ jobs:
     steps:
 `, i, i, i)
 		for j := 0; j < 5; j++ {
-			yamlContent += fmt.Sprintf(`      - name: Step %d-%d
+			fmt.Fprintf(&builder, `      - name: Step %d-%d
         run: echo "Running step %d in job %d"
         env:
           STEP_VAR: step_value_%d_%d
 `, i, j, j, i, i, j)
 		}
 	}
+	yamlContent := builder.String()
 
 	tmpDir := b.TempDir()
 	workflowPath := filepath.Join(tmpDir, "benchmark.yml")

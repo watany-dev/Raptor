@@ -64,7 +64,8 @@ func extractJobOrderFromNode(root *yaml.Node) []string {
 
 		if keyNode.Value == "jobs" && valueNode.Kind == yaml.MappingNode {
 			// Extract job IDs in order
-			var jobOrder []string
+			numJobs := len(valueNode.Content) / 2
+			jobOrder := make([]string, 0, numJobs)
 			for j := 0; j < len(valueNode.Content)-1; j += 2 {
 				jobKeyNode := valueNode.Content[j]
 				jobOrder = append(jobOrder, jobKeyNode.Value)
