@@ -2,7 +2,6 @@ package security
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -85,71 +84,49 @@ func containsAt(s, substr string) bool {
 	return false
 }
 
-// TestValidateWorkingDirectory_DeeplyNested tests deeply nested paths
+// TestValidateWorkingDirectory_DeeplyNested tests deeply nested relative paths are accepted
 func TestValidateWorkingDirectory_DeeplyNested(t *testing.T) {
 	t.Parallel()
-	baseDir := t.TempDir()
-	workspace := filepath.Join(baseDir, "workspace")
 
-	// Create a deeply nested path (100 levels deep)
-	deepPath := workspace
-	for i := 0; i < 100; i++ {
+	// Create a deeply nested relative path (10 levels deep)
+	deepPath := "level0"
+	for i := 1; i < 10; i++ {
 		deepPath = filepath.Join(deepPath, fmt.Sprintf("level%d", i))
 	}
 
-	// Validate should accept deeply nested paths as long as they stay in workspace
-	err := ValidateWorkingDirectory(workspace, deepPath)
+	// Deeply nested relative paths should be accepted as they stay within workspace
+	err := ValidateWorkingDirectory(deepPath, "/repo")
 	if err != nil {
-		t.Logf("ValidateWorkingDirectory() with 100-level nesting: %v", err)
-		// Deep nesting may fail, which is acceptable
+		t.Errorf("ValidateWorkingDirectory() error = %v; deeply nested relative paths should be valid", err)
 	}
 }
 
-// TestValidateWorkingDirectory_UnicodeCharacters tests paths with unicode characters
+// TestValidateWorkingDirectory_UnicodeCharacters tests paths with unicode characters are accepted
 func TestValidateWorkingDirectory_UnicodeCharacters(t *testing.T) {
 	t.Parallel()
-	baseDir := t.TempDir()
-	workspace := filepath.Join(baseDir, "workspace-日本語")
 
-	// Create workspace directory
-	if err := os.MkdirAll(workspace, 0755); err != nil {
-		t.Skipf("failed to create unicode-named directory: %v", err)
-	}
+	// Test relative path with unicode characters - should be valid
+	unicodePath := "ディレクトリ/ファイル"
 
-	// Test path with unicode characters
-	unicodePath := filepath.Join(workspace, "ファイル.txt")
-
-	err := ValidateWorkingDirectory(workspace, unicodePath)
+	err := ValidateWorkingDirectory(unicodePath, "/repo")
 	if err != nil {
-		t.Logf("ValidateWorkingDirectory() with unicode characters: %v", err)
-		// Some systems may not support unicode in paths
+		t.Errorf("ValidateWorkingDirectory() error = %v; unicode paths should be valid", err)
 	}
 }
 
-// TestValidateWorkingDirectory_CaseSensitivity tests case sensitivity in paths
+// TestValidateWorkingDirectory_CaseSensitivity tests that different case paths are both accepted
 func TestValidateWorkingDirectory_CaseSensitivity(t *testing.T) {
 	t.Parallel()
-	baseDir := t.TempDir()
-	workspace := filepath.Join(baseDir, "workspace")
 
-	if err := os.MkdirAll(workspace, 0755); err != nil {
-		t.Fatalf("failed to create workspace: %v", err)
-	}
+	// Both lowercase and uppercase relative paths should be valid
+	err1 := ValidateWorkingDirectory("test/path", "/repo")
+	err2 := ValidateWorkingDirectory("TEST/PATH", "/repo")
 
-	// Test with different case
-	path1 := filepath.Join(workspace, "test")
-	path2 := filepath.Join(workspace, "TEST")
-
-	// Both paths should be valid (within workspace)
-	err1 := ValidateWorkingDirectory(workspace, path1)
-	err2 := ValidateWorkingDirectory(workspace, path2)
-
-	// Both should be acceptable (case may or may not matter depending on filesystem)
 	if err1 != nil {
-		t.Logf("ValidateWorkingDirectory() for lowercase path: %v", err1)
+		t.Errorf("ValidateWorkingDirectory() lowercase error = %v; should be valid", err1)
 	}
 	if err2 != nil {
-		t.Logf("ValidateWorkingDirectory() for uppercase path: %v", err2)
+		t.Errorf("ValidateWorkingDirectory() uppercase error = %v; should be valid", err2)
 	}
 }
 

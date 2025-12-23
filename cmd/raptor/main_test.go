@@ -363,49 +363,65 @@ func TestRunCommand_ParseError(t *testing.T) {
 	}
 }
 
-// TestMain_Coverage tests the main function using subprocess
-// This is a special test pattern to achieve coverage of main()
-func TestMain_Coverage(t *testing.T) {
-	if os.Getenv("TEST_MAIN_COVERAGE") == "1" {
-		// When called as subprocess, run main
+// TestMain_Subprocess tests main() by running as a subprocess
+// This provides coverage for the main entry point
+func TestMain_Subprocess(t *testing.T) {
+	if os.Getenv("TEST_MAIN_SUBPROCESS") == "1" {
 		main()
 		return
 	}
 
-	// Build the test binary
-	tmpDir := t.TempDir()
-	binPath := filepath.Join(tmpDir, "raptor")
-
-	// Use go build with cover flag
-	buildCmd := exec.Command("go", "build", "-cover", "-o", binPath, ".")
-	buildCmd.Dir = filepath.Dir(os.Args[0])
-	buildCmd.Stderr = os.Stderr
 	if testing.Short() {
-		t.Skip("skipping main coverage test in short mode")
+		t.Skip("skipping subprocess test in short mode")
 	}
 
-	// Test help command (should succeed)
-	t.Run("help succeeds", func(t *testing.T) {
-		cmd := exec.Command(os.Args[0], "-test.run=TestMain_Coverage")
-		cmd.Env = append(os.Environ(), "TEST_MAIN_COVERAGE=1")
-		cmd.Args = append(cmd.Args, "--", "help")
-		err := cmd.Run()
-		if err != nil {
-			// The test framework might exit non-zero, that's okay
-			t.Logf("help command: %v", err)
-		}
-	})
+	tests := []struct {
+		name       string
+		args       []string
+		wantExit   int
+		wantOutput string
+	}{
+		{
+			name:       "help command",
+			args:       []string{"help"},
+			wantExit:   0,
+			wantOutput: "Usage:",
+		},
+		{
+			name:       "version command",
+			args:       []string{"version"},
+			wantExit:   0,
+			wantOutput: "raptor",
+		},
+	}
 
-	// Test version command (should succeed)
-	t.Run("version succeeds", func(t *testing.T) {
-		cmd := exec.Command(os.Args[0], "-test.run=TestMain_Coverage")
-		cmd.Env = append(os.Environ(), "TEST_MAIN_COVERAGE=1")
-		cmd.Args = append(cmd.Args, "--", "version")
-		err := cmd.Run()
-		if err != nil {
-			t.Logf("version command: %v", err)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := exec.Command(os.Args[0], "-test.run=TestMain_Subprocess")
+			cmd.Env = append(os.Environ(), "TEST_MAIN_SUBPROCESS=1")
+			for _, arg := range tt.args {
+				cmd.Args = append(cmd.Args, "--", arg)
+			}
+
+			output, err := cmd.CombinedOutput()
+
+			// Check exit code through error type
+			if err != nil {
+				if exitErr, ok := err.(*exec.ExitError); ok {
+					if exitErr.ExitCode() != tt.wantExit {
+						t.Errorf("exit code = %d; want %d", exitErr.ExitCode(), tt.wantExit)
+					}
+				}
+			} else if tt.wantExit != 0 {
+				t.Errorf("expected exit code %d, got 0", tt.wantExit)
+			}
+
+			// Check expected output
+			if tt.wantOutput != "" && !strings.Contains(string(output), tt.wantOutput) {
+				t.Errorf("output = %q; want to contain %q", string(output), tt.wantOutput)
+			}
+		})
+	}
 }
 
 // TestRunCommand_MultipleJobsWithFailure tests multiple jobs where one fails

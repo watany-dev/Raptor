@@ -411,7 +411,7 @@ func TestLoadWorkflowFile_LargeFile(t *testing.T) {
 	}
 }
 
-// Test LoadWorkflowFile with null jobs node
+// TestLoadWorkflowFile_NullJobsNode tests that null jobs are handled gracefully
 func TestLoadWorkflowFile_NullJobsNode(t *testing.T) {
 	t.Parallel()
 	yamlContent := `name: Test Workflow
@@ -424,17 +424,26 @@ jobs: null`
 
 	wf, err := LoadWorkflowFile(workflowPath)
 	if err != nil {
-		// It's acceptable to error on null jobs
-		return
+		t.Fatalf("LoadWorkflowFile() error = %v; null jobs should be accepted", err)
 	}
 
-	// Or if it doesn't error, jobs should be empty/nil
-	if len(wf.Jobs) > 0 {
-		t.Error("LoadWorkflowFile() expected nil or empty jobs for null jobs node")
+	// Jobs should be empty/nil for null jobs node
+	if len(wf.Jobs) != 0 {
+		t.Errorf("LoadWorkflowFile() jobs count = %d; want 0 for null jobs", len(wf.Jobs))
+	}
+
+	// JobOrder should be empty
+	if len(wf.JobOrder) != 0 {
+		t.Errorf("LoadWorkflowFile() jobOrder = %v; want empty for null jobs", wf.JobOrder)
+	}
+
+	// Name should still be parsed
+	if wf.Name != "Test Workflow" {
+		t.Errorf("LoadWorkflowFile() name = %q; want %q", wf.Name, "Test Workflow")
 	}
 }
 
-// Test extractJobOrderFromNode with empty content
+// TestExtractJobOrderFromNode_EmptyContent tests that empty files return empty workflow
 func TestExtractJobOrderFromNode_EmptyContent(t *testing.T) {
 	t.Parallel()
 	yamlContent := ``
@@ -444,14 +453,25 @@ func TestExtractJobOrderFromNode_EmptyContent(t *testing.T) {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	_, err := LoadWorkflowFile(workflowPath)
-	if err == nil {
-		// Empty file might be treated differently
-		t.Log("Empty file accepted without error")
+	wf, err := LoadWorkflowFile(workflowPath)
+	// YAML allows empty documents - they decode to zero-value structs
+	if err != nil {
+		t.Fatalf("LoadWorkflowFile() error = %v", err)
+	}
+
+	// Empty file should result in empty workflow with no name, jobs, or job order
+	if wf.Name != "" {
+		t.Errorf("Name = %q; want empty for empty file", wf.Name)
+	}
+	if len(wf.Jobs) != 0 {
+		t.Errorf("Jobs count = %d; want 0 for empty file", len(wf.Jobs))
+	}
+	if len(wf.JobOrder) != 0 {
+		t.Errorf("JobOrder = %v; want empty for empty file", wf.JobOrder)
 	}
 }
 
-// Test extractJobOrderFromNode with jobs as sequence
+// TestExtractJobOrderFromNode_JobsAsSequence tests that jobs defined as sequence returns error
 func TestExtractJobOrderFromNode_JobsAsSequence(t *testing.T) {
 	t.Parallel()
 	yamlContent := `name: Test Workflow
@@ -464,15 +484,10 @@ jobs:
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	wf, err := LoadWorkflowFile(workflowPath)
-	if err != nil {
-		// It's acceptable to error on invalid jobs format
-		return
-	}
-
-	// JobOrder should be empty since jobs is not a mapping
-	if len(wf.JobOrder) > 0 {
-		t.Errorf("JobOrder should be empty for sequence jobs, got %v", wf.JobOrder)
+	_, err := LoadWorkflowFile(workflowPath)
+	// Jobs must be a mapping, not a sequence - this should error during decode
+	if err == nil {
+		t.Error("LoadWorkflowFile() expected error for jobs as sequence, got nil")
 	}
 }
 
@@ -534,54 +549,68 @@ func TestDiscoverWorkflows_StatError(t *testing.T) {
 	}
 }
 
-// TestLoadWorkflowFile_DecodeError tests the parseWorkflowFromNode decode error path
-func TestLoadWorkflowFile_DecodeError(t *testing.T) {
+// TestLoadWorkflowFile_TypeCoercion tests that YAML type coercion works for workflow fields
+func TestLoadWorkflowFile_TypeCoercion(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	// Create YAML that parses but fails to decode into WorkflowFile struct
-	// This uses a valid YAML structure but with incompatible types
+	// YAML allows type coercion: numeric 123 becomes string "123", boolean true becomes "true"
 	yamlContent := `name: 123
 jobs:
   test:
     runs-on: true
     steps:
       - run: echo test`
-	workflowPath := filepath.Join(tmpDir, "decode_error.yml")
+	workflowPath := filepath.Join(tmpDir, "coercion.yml")
 	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	// The YAML is valid but may have type mismatches
-	// This tests that the code handles such cases gracefully
 	wf, err := LoadWorkflowFile(workflowPath)
 	if err != nil {
-		// Error is acceptable
-		return
+		t.Fatalf("LoadWorkflowFile() error = %v", err)
 	}
 
-	// If no error, verify it was parsed (with type coercion)
-	if wf == nil {
-		t.Error("Expected non-nil workflow or error")
+	// Verify type coercion happened correctly
+	if wf.Name != "123" {
+		t.Errorf("Name = %q; want %q (numeric should be coerced to string)", wf.Name, "123")
+	}
+
+	job, ok := wf.Jobs["test"]
+	if !ok {
+		t.Fatal("test job not found")
+	}
+	if job.RunsOn != "true" {
+		t.Errorf("RunsOn = %q; want %q (boolean should be coerced to string)", job.RunsOn, "true")
 	}
 }
 
-// TestExtractJobOrderFromNode_EmptyDocument tests extractJobOrderFromNode with empty document
-func TestExtractJobOrderFromNode_EmptyDocument(t *testing.T) {
+// TestExtractJobOrderFromNode_CommentOnlyDocument tests file with only comments returns empty workflow
+func TestExtractJobOrderFromNode_CommentOnlyDocument(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
-	// Create an empty YAML document (just whitespace/comments)
+	// A file with only comments is treated as empty/null document by YAML parser
 	yamlContent := `# Just a comment
 `
-	workflowPath := filepath.Join(tmpDir, "empty_doc.yml")
+	workflowPath := filepath.Join(tmpDir, "comment_only.yml")
 	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 
-	_, err := LoadWorkflowFile(workflowPath)
-	// May or may not error, but should not panic
-	_ = err
+	wf, err := LoadWorkflowFile(workflowPath)
+	// YAML treats comment-only as empty document - decodes to zero-value struct
+	if err != nil {
+		t.Fatalf("LoadWorkflowFile() error = %v", err)
+	}
+
+	// Should return empty workflow
+	if wf.Name != "" {
+		t.Errorf("Name = %q; want empty for comment-only file", wf.Name)
+	}
+	if len(wf.Jobs) != 0 {
+		t.Errorf("Jobs count = %d; want 0 for comment-only file", len(wf.Jobs))
+	}
 }
 
 // TestExtractJobOrderFromNode_NonMappingDocument tests with a YAML array at root

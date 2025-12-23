@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -170,8 +172,40 @@ func TestParseRunFlags_IsolateAlwaysTrue(t *testing.T) {
 }
 
 func TestPrintHelp(t *testing.T) {
-	// Just verify it doesn't panic
+	// Test that PrintHelp runs without panic (uses stdout)
 	PrintHelp()
+}
+
+func TestFprintHelp(t *testing.T) {
+	var buf bytes.Buffer
+	FprintHelp(&buf)
+	output := buf.String()
+
+	// Verify essential help content is present
+	requiredContent := []string{
+		"Usage:",
+		"raptor",
+		"Commands:",
+		"run",
+		"Options:",
+		"--workflow",
+		"--job",
+		"--workdir",
+		"--dry-run",
+		"Examples:",
+		"Security:",
+	}
+
+	for _, content := range requiredContent {
+		if !strings.Contains(output, content) {
+			t.Errorf("Help output missing required content: %q", content)
+		}
+	}
+
+	// Verify output is not empty and has reasonable length
+	if len(output) < 500 {
+		t.Errorf("Help output seems too short (%d bytes), expected comprehensive help", len(output))
+	}
 }
 
 // TestParseRunFlags_DryRunFlag tests the dry-run flag

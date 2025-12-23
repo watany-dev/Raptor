@@ -3,6 +3,7 @@ package cli
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 )
 
@@ -63,31 +64,36 @@ func ParseRunFlags(args []string) (*RunOptions, error) {
 	return opts, nil
 }
 
-// PrintHelp prints the help message for the CLI.
+// PrintHelp prints the help message for the CLI to stdout.
 func PrintHelp() {
-	fmt.Println("Usage: raptor <command> [options]")
-	fmt.Println("       raptor [options]           (dry-run mode)")
-	fmt.Println()
-	fmt.Println("Commands:")
-	fmt.Println("  run      Run a workflow job")
-	fmt.Println()
-	fmt.Println("Options:")
-	fmt.Println("  -w, --workflow  Path to the workflow file (required)")
-	fmt.Println("  -j, --job       Job ID to run (if omitted, runs all jobs)")
-	fmt.Println("  -C, --workdir   Working directory for execution")
-	fmt.Println("  -n, --dry-run   Show what would be executed without running")
-	fmt.Println()
-	fmt.Println("Dry-run mode:")
-	fmt.Println("  When called without 'run' command, raptor operates in dry-run mode.")
-	fmt.Println("  This shows what would be executed without actually running commands.")
-	fmt.Println()
-	fmt.Println("Security:")
-	fmt.Println("  All workflows run in isolated git worktrees for security.")
-	fmt.Println("  See SECURITY.md for details.")
-	fmt.Println()
-	fmt.Println("Examples:")
-	fmt.Println("  raptor -w ci.yml              # Dry-run: show what would be executed")
-	fmt.Println("  raptor run -w ci.yml          # Execute the workflow")
-	fmt.Println("  raptor run -w ci.yml -j test  # Execute specific job")
-	fmt.Println("  raptor run -w ci.yml -n       # Dry-run with explicit flag")
+	FprintHelp(os.Stdout)
+}
+
+// FprintHelp writes the help message for the CLI to the specified writer.
+func FprintHelp(w io.Writer) {
+	fmt.Fprintln(w, "Usage: raptor <command> [options]")
+	fmt.Fprintln(w, "       raptor [options]           (dry-run mode)")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Commands:")
+	fmt.Fprintln(w, "  run      Run a workflow job")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Options:")
+	fmt.Fprintln(w, "  -w, --workflow  Path to the workflow file (required)")
+	fmt.Fprintln(w, "  -j, --job       Job ID to run (if omitted, runs all jobs)")
+	fmt.Fprintln(w, "  -C, --workdir   Working directory for execution")
+	fmt.Fprintln(w, "  -n, --dry-run   Show what would be executed without running")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Dry-run mode:")
+	fmt.Fprintln(w, "  When called without 'run' command, raptor operates in dry-run mode.")
+	fmt.Fprintln(w, "  This shows what would be executed without actually running commands.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Security:")
+	fmt.Fprintln(w, "  All workflows run in isolated git worktrees for security.")
+	fmt.Fprintln(w, "  See SECURITY.md for details.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Examples:")
+	fmt.Fprintln(w, "  raptor -w ci.yml              # Dry-run: show what would be executed")
+	fmt.Fprintln(w, "  raptor run -w ci.yml          # Execute the workflow")
+	fmt.Fprintln(w, "  raptor run -w ci.yml -j test  # Execute specific job")
+	fmt.Fprintln(w, "  raptor run -w ci.yml -n       # Dry-run with explicit flag")
 }

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -918,8 +917,8 @@ jobs:
 	}
 }
 
-// TestRunner_Run_ContextCancellation tests that execution stops when context is cancelled
-func TestRunner_Run_ContextCancellation(t *testing.T) {
+// TestRunner_Run_StepOutputCapture tests that step output is properly captured
+func TestRunner_Run_StepOutputCapture(t *testing.T) {
 	tmpDir := t.TempDir()
 	setupTestGitRepo(t, tmpDir)
 	workflowPath := filepath.Join(tmpDir, "workflow.yml")
@@ -938,7 +937,6 @@ jobs:
 		t.Fatalf("Failed to write workflow file: %v", err)
 	}
 
-	// Create a mock that supports context cancellation checking
 	mock := newMockExecutor(
 		executor.Result{ExitCode: 0, Stdout: "step1\n"},
 		executor.Result{ExitCode: 0, Stdout: "step2\n"},
@@ -949,12 +947,6 @@ jobs:
 	stderr := &bytes.Buffer{}
 	runner.SetOutput(stdout, stderr)
 
-	// Test with cancelled context
-	_ = context.Background()
-
-	// Note: The exact context handling depends on the runner implementation
-	// This test verifies that the system can handle cancelled contexts properly
-	// In the current implementation, context may not be fully utilized
 	results, err := runner.Run(&RunOptions{
 		Workflow:   workflowPath,
 		Job:        "test",
@@ -965,8 +957,29 @@ jobs:
 		t.Fatalf("Run() error = %v", err)
 	}
 
+	// Verify job result
 	if len(results) != 1 {
-		t.Errorf("Expected 1 job result, got %d", len(results))
+		t.Fatalf("Expected 1 job result, got %d", len(results))
+	}
+
+	// Verify both steps were executed
+	if len(mock.calls) != 2 {
+		t.Errorf("Expected 2 step executions, got %d", len(mock.calls))
+	}
+
+	// Verify step results contain expected output
+	result := results[0]
+	if len(result.StepResults) != 2 {
+		t.Fatalf("Expected 2 step results, got %d", len(result.StepResults))
+	}
+
+	// Verify stdout contains step output
+	output := stdout.String()
+	if !strings.Contains(output, "step1") {
+		t.Errorf("Output should contain step1, got: %s", output)
+	}
+	if !strings.Contains(output, "step2") {
+		t.Errorf("Output should contain step2, got: %s", output)
 	}
 }
 
@@ -1158,11 +1171,42 @@ func TestRunner_NewRunner(t *testing.T) {
 
 // TestRunner_SetOutput tests SetOutput method
 func TestRunner_SetOutput(t *testing.T) {
-	runner := NewRunner(newMockExecutor())
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Step
+        run: echo "output test"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(executor.Result{ExitCode: 0, Stdout: "output test\n"})
+	runner := NewRunner(mock)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 
 	runner.SetOutput(stdout, stderr)
 
-	// Just verify it doesn't panic and can be called
+	// Run workflow to verify output goes to the buffers
+	_, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+	})
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Verify that output was written to stdout buffer
+	output := stdout.String()
+	if !strings.Contains(output, "output test") {
+		t.Errorf("SetOutput() did not redirect output to buffer, got: %q", output)
+	}
 }
