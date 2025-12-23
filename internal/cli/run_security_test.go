@@ -44,7 +44,6 @@ jobs:
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
-		Isolate:    true,
 	})
 
 	// Error should occur due to absolute path
@@ -90,7 +89,6 @@ jobs:
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
-		Isolate:    true,
 	})
 
 	// Error should occur due to path traversal
@@ -142,7 +140,6 @@ jobs:
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
-		Isolate:    true,
 	})
 
 	// Should succeed
@@ -188,7 +185,6 @@ jobs:
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
-		Isolate:    true,
 	})
 
 	// Error should occur due to not being in a git repository
@@ -240,7 +236,6 @@ jobs:
 		Workflow:   workflowPath,
 		Job:        "test",
 		WorkingDir: tmpDir,
-		Isolate:    true,
 	})
 
 	// Should succeed

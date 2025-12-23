@@ -159,18 +159,6 @@ func TestParseRunFlags_DefaultWorkDir(t *testing.T) {
 	}
 }
 
-func TestParseRunFlags_IsolateAlwaysTrue(t *testing.T) {
-	// Isolated execution is now mandatory for security
-	// The --isolate flag has been removed
-	opts, err := ParseRunFlags([]string{"--workflow", "ci.yml", "--job", "build"})
-	if err != nil {
-		t.Fatalf("ParseRunFlags() error = %v", err)
-	}
-	if !opts.Isolate {
-		t.Error("Isolate should always be true for security")
-	}
-}
-
 func TestPrintHelp(t *testing.T) {
 	// Test that PrintHelp runs without panic (uses stdout)
 	PrintHelp()
