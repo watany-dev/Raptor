@@ -210,3 +210,23 @@ echo "line3"`,
 		}
 	}
 }
+
+func TestHostExecutor_Execute_CommandNotExist(t *testing.T) {
+	executor := NewHostExecutor()
+
+	// This will cause the shell to return an error
+	config := Config{
+		Command: "nonexistent_command_xyz_abc_123",
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		// It's ok if it errors
+		return
+	}
+
+	// If it doesn't error, it should have a non-zero exit code (command not found)
+	if result.ExitCode == 0 {
+		t.Errorf("expected non-zero exit code for non-existent command, got %d", result.ExitCode)
+	}
+}
