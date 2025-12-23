@@ -692,3 +692,71 @@ func TestNewStepExecutor(t *testing.T) {
 		}
 	})
 }
+
+// errorMockExecutor is a mock that returns an error
+type errorMockExecutor struct{}
+
+func (m *errorMockExecutor) Execute(_ executor.Config) (executor.Result, error) {
+	return executor.Result{}, os.ErrPermission
+}
+
+// TestStepExecutor_executeStep_ExecutorError tests the error path when executor.Execute fails
+func TestStepExecutor_executeStep_ExecutorError(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+	pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+	mock := &errorMockExecutor{}
+	evaluator := expression.NewConditionEvaluator()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+	ctx := NewExecutionContext(map[string]string{})
+
+	step := &workflow.Step{
+		Name: "Test Step",
+		Run:  "echo test",
+	}
+
+	_, err := se.executeStep(step, 0, "Test Step", map[string]string{}, ctx)
+	if err == nil {
+		t.Error("executeStep() expected error when executor fails")
+	}
+}
+
+// TestStepExecutor_updateEnvironmentFromFiles_PathFileError tests ParsePathFile error path
+func TestStepExecutor_updateEnvironmentFromFiles_PathFileError(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("skipping permission test as root")
+	}
+
+	tmpDir := t.TempDir()
+	envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+	pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+	// Create path file with no read permission
+	if err := os.WriteFile(pathFilePath, []byte("/some/path\n"), 0000); err != nil {
+		t.Fatalf("Failed to write path file: %v", err)
+	}
+	defer func() {
+		_ = os.Chmod(pathFilePath, 0644)
+	}()
+
+	mock := newMockExecutor()
+	evaluator := expression.NewConditionEvaluator()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+	ctx := NewExecutionContext(map[string]string{})
+
+	err := se.updateEnvironmentFromFiles(ctx)
+	if err == nil {
+		t.Error("updateEnvironmentFromFiles() expected error for unreadable path file")
+	}
+}

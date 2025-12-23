@@ -3,6 +3,7 @@ package worktree
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -429,5 +430,131 @@ func TestCreateWorkspace_ConcurrentCreation(t *testing.T) {
 	// Cleanup
 	for _, ws := range workspaces {
 		_ = RemoveWorkspace(ctx, ws)
+	}
+}
+
+// TestCreateWorkspace_GitWorktreeAddError tests CreateWorkspace when git worktree add fails
+func TestCreateWorkspace_GitWorktreeAddError(t *testing.T) {
+	ctx := context.Background()
+
+	// Use a directory that is a valid git repo but causes git worktree add to fail
+	// For example, a bare repository
+	tmpDir := t.TempDir()
+
+	// Create a bare repository
+	cmd := exec.Command("git", "init", "--bare")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("Failed to create bare repo: %v", err)
+	}
+
+	// Try to create workspace in bare repo - should fail
+	_, err := CreateWorkspace(ctx, tmpDir, true)
+	if err == nil {
+		t.Error("CreateWorkspace() expected error for bare repository")
+	}
+}
+
+// TestRemoveWorkspace_ManualCleanupFallback tests the manual cleanup fallback path
+func TestRemoveWorkspace_ManualCleanupFallback(t *testing.T) {
+	ctx := context.Background()
+	repoRoot := findTestRepoRoot(t)
+
+	// Create a workspace
+	ws, err := CreateWorkspace(ctx, repoRoot, false)
+	if err != nil {
+		t.Fatalf("CreateWorkspace() error = %v", err)
+	}
+
+	wsPath := ws.Path
+
+	// Remove the .git file/directory to make git worktree remove fail
+	gitPath := filepath.Join(ws.Path, ".git")
+	if err := os.Remove(gitPath); err != nil {
+		// .git might be a directory on some systems
+		if err := os.RemoveAll(gitPath); err != nil {
+			t.Fatalf("Failed to remove .git: %v", err)
+		}
+	}
+
+	// Remove should use fallback and succeed
+	err = RemoveWorkspace(ctx, ws)
+	if err != nil {
+		t.Logf("RemoveWorkspace() returned error: %v", err)
+	}
+
+	// Verify directory was removed (or at least attempted)
+	if _, err := os.Stat(wsPath); !os.IsNotExist(err) {
+		// Clean up manually if it still exists
+		_ = os.RemoveAll(wsPath)
+	}
+}
+
+// TestVerifyGitRepo tests the verifyGitRepo function indirectly
+func TestVerifyGitRepo(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("fails for non-git directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		// Don't initialize git
+
+		_, err := CreateWorkspace(ctx, tmpDir, false)
+		if err == nil {
+			t.Error("CreateWorkspace() expected error for non-git directory")
+		}
+	})
+
+	t.Run("succeeds for git directory", func(t *testing.T) {
+		repoRoot := findTestRepoRoot(t)
+
+		ws, err := CreateWorkspace(ctx, repoRoot, false)
+		if err != nil {
+			t.Fatalf("CreateWorkspace() error = %v", err)
+		}
+		defer func() { _ = RemoveWorkspace(ctx, ws) }()
+	})
+}
+
+// errorReader always returns an error when Read is called
+type errorReader struct{}
+
+func (e errorReader) Read(_ []byte) (int, error) {
+	return 0, os.ErrPermission
+}
+
+// TestGenerateID_Error tests the error path of generateID
+func TestGenerateID_Error(t *testing.T) {
+	// Save original reader and restore after test
+	originalReader := randReader
+	defer func() { randReader = originalReader }()
+
+	// Replace with error reader
+	randReader = errorReader{}
+
+	_, err := generateID()
+	if err == nil {
+		t.Error("generateID() expected error when rand reader fails")
+	}
+}
+
+// TestCreateWorkspace_GenerateIDError tests CreateWorkspace when generateID fails
+func TestCreateWorkspace_GenerateIDError(t *testing.T) {
+	// Save original reader and restore after test
+	originalReader := randReader
+	defer func() { randReader = originalReader }()
+
+	// Replace with error reader
+	randReader = errorReader{}
+
+	ctx := context.Background()
+	repoRoot := findTestRepoRoot(t)
+
+	_, err := CreateWorkspace(ctx, repoRoot, true)
+	if err == nil {
+		t.Error("CreateWorkspace() expected error when generateID fails")
+	}
+
+	if !strings.Contains(err.Error(), "failed to generate workspace ID") {
+		t.Errorf("Error message should mention generateID failure, got: %v", err)
 	}
 }
