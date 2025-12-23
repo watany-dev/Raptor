@@ -40,10 +40,7 @@ func (drf *DryRunFormatter) Format(wf *workflow.WorkflowFile, jobIDs []string, w
 			return nil, fmt.Errorf("failed to select job: %w", err)
 		}
 
-		result, err := drf.formatJob(jobID, job)
-		if err != nil {
-			return nil, err
-		}
+		result := drf.formatJob(jobID, job)
 		results = append(results, result)
 	}
 
@@ -55,7 +52,7 @@ func (drf *DryRunFormatter) Format(wf *workflow.WorkflowFile, jobIDs []string, w
 }
 
 // formatJob formats a single job's dry-run preview.
-func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) (*RunResult, error) {
+func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) *RunResult {
 	_, _ = fmt.Fprintf(drf.stdout, "📋 Job: %s\n", jobID)
 	if job.Name != "" && job.Name != jobID {
 		_, _ = fmt.Fprintf(drf.stdout, "   Name: %s\n", job.Name)
@@ -86,7 +83,7 @@ func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) (*RunResu
 		})
 	}
 
-	return result, nil
+	return result
 }
 
 // formatStep formats a single step's dry-run preview.
