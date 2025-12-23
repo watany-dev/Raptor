@@ -20,45 +20,60 @@ Raptorは、GitHub Actionsのワークフローファイル (`.github/workflows/
 
 [リリースページ](https://github.com/watany-dev/raptor/releases)から、お使いのプラットフォームに合ったバイナリをダウンロードしてください。
 
-#### Linux / macOS
+#### Linux (x86_64)
 
 ```bash
-# バイナリをダウンロード（例: Linux x86_64）
-curl -LO https://github.com/watany-dev/raptor/releases/latest/download/raptor_<VERSION>_Linux_x86_64.tar.gz
-
-# 解凍
-tar xzf raptor_<VERSION>_Linux_x86_64.tar.gz
-
-# 実行可能パスに移動
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Linux_x86_64.tar.gz
+tar xzf raptor_0.1.0_Linux_x86_64.tar.gz
 sudo mv raptor /usr/local/bin/
-
-# 動作確認
 raptor --version
 ```
 
-#### Windows
+#### Linux (ARM64)
 
-1. [リリースページ](https://github.com/watany-dev/raptor/releases)から `raptor_<VERSION>_Windows_x86_64.zip` をダウンロード
+```bash
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Linux_arm64.tar.gz
+tar xzf raptor_0.1.0_Linux_arm64.tar.gz
+sudo mv raptor /usr/local/bin/
+raptor --version
+```
+
+#### macOS (Apple Silicon)
+
+```bash
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Darwin_arm64.tar.gz
+tar xzf raptor_0.1.0_Darwin_arm64.tar.gz
+sudo mv raptor /usr/local/bin/
+raptor --version
+```
+
+#### macOS (Intel)
+
+```bash
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Darwin_x86_64.tar.gz
+tar xzf raptor_0.1.0_Darwin_x86_64.tar.gz
+sudo mv raptor /usr/local/bin/
+raptor --version
+```
+
+#### Windows (x86_64)
+
+1. [raptor_0.1.0_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Windows_x86_64.zip) をダウンロード
 2. ZIPファイルを解凍
 3. `raptor.exe` をPATHの通ったディレクトリに配置
 
-### Go installを使用
+### Go install
 
 ```bash
-go install github.com/watany-dev/raptor/cmd/raptor@latest
+go install github.com/watany-dev/raptor/cmd/raptor@v0.1.0
 ```
 
 ### ソースからビルド
 
 ```bash
-# リポジトリのクローン
 git clone https://github.com/watany-dev/raptor.git
 cd raptor
-
-# ビルド
 go build -o raptor ./cmd/raptor
-
-# パスに追加 (オプション)
 sudo mv raptor /usr/local/bin/
 ```
 
