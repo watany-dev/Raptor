@@ -427,7 +427,7 @@ jobs: null`
 	}
 
 	// Or if it doesn't error, jobs should be empty/nil
-	if wf.Jobs != nil && len(wf.Jobs) > 0 {
+	if len(wf.Jobs) > 0 {
 		t.Error("LoadWorkflowFile() expected nil or empty jobs for null jobs node")
 	}
 }

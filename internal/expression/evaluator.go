@@ -16,17 +16,17 @@ type StepContext struct {
 // ConditionEvaluator evaluates step if conditions.
 // It pre-compiles regex patterns for better performance.
 type ConditionEvaluator struct {
-	envCompareRegex    *regexp.Regexp
-	envNotEqualRegex   *regexp.Regexp
-	stepsOutcomeRegex  *regexp.Regexp
+	envCompareRegex   *regexp.Regexp
+	envNotEqualRegex  *regexp.Regexp
+	stepsOutcomeRegex *regexp.Regexp
 }
 
 // NewConditionEvaluator creates a new ConditionEvaluator with pre-compiled regex patterns.
 func NewConditionEvaluator() *ConditionEvaluator {
 	return &ConditionEvaluator{
-		envCompareRegex:    regexp.MustCompile(`env\.(\w+)\s*==\s*'([^']*)'`),
-		envNotEqualRegex:   regexp.MustCompile(`env\.(\w+)\s*!=\s*'([^']*)'`),
-		stepsOutcomeRegex:  regexp.MustCompile(`steps\.(\w+)\.outcome\s*==\s*'([^']*)'`),
+		envCompareRegex:   regexp.MustCompile(`env\.(\w+)\s*==\s*'([^']*)'`),
+		envNotEqualRegex:  regexp.MustCompile(`env\.(\w+)\s*!=\s*'([^']*)'`),
+		stepsOutcomeRegex: regexp.MustCompile(`steps\.(\w+)\.outcome\s*==\s*'([^']*)'`),
 	}
 }
 

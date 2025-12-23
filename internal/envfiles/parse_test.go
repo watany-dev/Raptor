@@ -109,7 +109,7 @@ VAR2=value2`,
 			wantErr: false,
 		},
 		{
-			name: "value with spaces",
+			name:    "value with spaces",
 			content: "MESSAGE=hello world",
 			expected: map[string]string{
 				"MESSAGE": "hello world",

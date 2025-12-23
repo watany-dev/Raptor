@@ -242,7 +242,7 @@ func TestGenerateID(t *testing.T) {
 		}
 		// Verify it's valid hex
 		for _, c := range id {
-			if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+			if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
 				t.Errorf("ID contains non-hex character: %c in %s", c, id)
 			}
 		}
@@ -356,5 +356,5 @@ func TestCreateWorkspace_IDFormat(t *testing.T) {
 	}
 
 	// Cleanup
-	RemoveWorkspace(ctx, ws)
+	_ = RemoveWorkspace(ctx, ws)
 }

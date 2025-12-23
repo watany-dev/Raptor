@@ -248,4 +248,3 @@ jobs:
 		t.Fatalf("Expected success for nested relative path, got: %v", err)
 	}
 }
-
