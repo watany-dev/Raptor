@@ -27,6 +27,20 @@ var BlockedEnvVars = map[string]string{
 	"GIT_WORK_TREE":        "can redirect git work tree",
 	"GIT_INDEX_FILE":       "can corrupt git index",
 	"GIT_OBJECT_DIRECTORY": "can redirect git objects",
+
+	// Shell command execution hooks
+	"PROMPT_COMMAND": "executes arbitrary code before each bash command",
+
+	// Dynamic linker (additional)
+	"LD_AUDIT": "can inject audit libraries (same risk as LD_PRELOAD)",
+
+	// Language startup hooks (code execution on interpreter start)
+	"PYTHONSTARTUP": "executes arbitrary Python code on interpreter start",
+
+	// Interactive command hijacking (used by git, less, etc.)
+	"PAGER":  "can execute arbitrary commands instead of pager",
+	"EDITOR": "can execute arbitrary commands instead of editor",
+	"VISUAL": "can execute arbitrary commands instead of editor",
 }
 
 // validEnvVarName matches valid environment variable names (A-Z, a-z, 0-9, _ starting with letter or underscore)

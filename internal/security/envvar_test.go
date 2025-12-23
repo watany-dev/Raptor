@@ -27,6 +27,13 @@ func TestValidateEnvVarName(t *testing.T) {
 		{"blocked ENV", "ENV", true},
 		{"blocked GIT_DIR", "GIT_DIR", true},
 		{"blocked IFS", "IFS", true},
+		{"blocked PROMPT_COMMAND", "PROMPT_COMMAND", true},
+		{"blocked prompt_command lowercase", "prompt_command", true},
+		{"blocked LD_AUDIT", "LD_AUDIT", true},
+		{"blocked PYTHONSTARTUP", "PYTHONSTARTUP", true},
+		{"blocked PAGER", "PAGER", true},
+		{"blocked EDITOR", "EDITOR", true},
+		{"blocked VISUAL", "VISUAL", true},
 
 		// Invalid format
 		{"invalid starts with number", "123VAR", true},
