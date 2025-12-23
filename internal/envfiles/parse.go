@@ -37,9 +37,9 @@ func ParseEnvFile(path string) (map[string]string, error) {
 		}
 
 		// Check for multiline delimiter format: KEY<<DELIMITER
-		if idx := strings.Index(line, "<<"); idx != -1 {
-			key := strings.TrimSpace(line[:idx])
-			delimiter := strings.TrimSpace(line[idx+2:])
+		if key, delimiter, found := strings.Cut(line, "<<"); found {
+			key = strings.TrimSpace(key)
+			delimiter = strings.TrimSpace(delimiter)
 
 			// Validate key name for security
 			if err := security.ValidateEnvVarName(key); err != nil {
@@ -70,9 +70,8 @@ func ParseEnvFile(path string) (map[string]string, error) {
 		}
 
 		// Simple KEY=VALUE format
-		if idx := strings.Index(line, "="); idx != -1 {
-			key := strings.TrimSpace(line[:idx])
-			value := line[idx+1:]
+		if key, value, found := strings.Cut(line, "="); found {
+			key = strings.TrimSpace(key)
 
 			// Validate key name for security
 			if err := security.ValidateEnvVarName(key); err != nil {

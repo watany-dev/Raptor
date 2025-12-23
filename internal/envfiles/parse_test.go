@@ -2,9 +2,10 @@ package envfiles
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -134,7 +135,7 @@ VAR2=value2`,
 				return
 			}
 
-			if !reflect.DeepEqual(result, tt.expected) {
+			if !maps.Equal(result, tt.expected) {
 				t.Errorf("ParseEnvFile() = %v, expected %v", result, tt.expected)
 			}
 		})
@@ -251,7 +252,7 @@ func TestParsePathFile(t *testing.T) {
 				return
 			}
 
-			if !reflect.DeepEqual(result, tt.expected) {
+			if !slices.Equal(result, tt.expected) {
 				t.Errorf("ParsePathFile() = %v, expected %v", result, tt.expected)
 			}
 		})
