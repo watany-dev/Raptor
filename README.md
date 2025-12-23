@@ -23,8 +23,8 @@ Raptorは、GitHub Actionsのワークフローファイル (`.github/workflows/
 #### Linux (x86_64)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Linux_x86_64.tar.gz
-tar xzf raptor_0.1.0_Linux_x86_64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Linux_x86_64.tar.gz
+tar xzf raptor_0.1.2_Linux_x86_64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
@@ -32,8 +32,8 @@ raptor --version
 #### Linux (ARM64)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Linux_arm64.tar.gz
-tar xzf raptor_0.1.0_Linux_arm64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Linux_arm64.tar.gz
+tar xzf raptor_0.1.2_Linux_arm64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
@@ -41,8 +41,8 @@ raptor --version
 #### macOS (Apple Silicon)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Darwin_arm64.tar.gz
-tar xzf raptor_0.1.0_Darwin_arm64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Darwin_arm64.tar.gz
+tar xzf raptor_0.1.2_Darwin_arm64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
@@ -50,22 +50,22 @@ raptor --version
 #### macOS (Intel)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Darwin_x86_64.tar.gz
-tar xzf raptor_0.1.0_Darwin_x86_64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Darwin_x86_64.tar.gz
+tar xzf raptor_0.1.2_Darwin_x86_64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
 
 #### Windows (x86_64)
 
-1. [raptor_0.1.0_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.1.0/raptor_0.1.0_Windows_x86_64.zip) をダウンロード
+1. [raptor_0.1.2_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Windows_x86_64.zip) をダウンロード
 2. ZIPファイルを解凍
 3. `raptor.exe` をPATHの通ったディレクトリに配置
 
 ### Go install
 
 ```bash
-go install github.com/watany-dev/raptor/cmd/raptor@v0.1.0
+go install github.com/watany-dev/raptor/cmd/raptor@v0.1.2
 ```
 
 ### ソースからビルド
@@ -80,7 +80,7 @@ sudo mv raptor /usr/local/bin/
 ### 必要要件
 
 - ランタイム: Git 2.5 以上
-- ソースビルド時のみ: Go 1.22 以上
+- ソースビルド時のみ: Go 1.24 以上
 
 ## 使い方
 
@@ -175,6 +175,7 @@ raptor --help
 ```bash
 raptor version
 raptor --version
+raptor -v
 ```
 
 ## サポートされる機能
@@ -227,6 +228,7 @@ steps:
 | `success()` | 前のステップがすべて成功 |
 | `failure()` | いずれかのステップが失敗 |
 | `always()` | 常に実行（失敗後も継続） |
+| `cancelled()` | キャンセル時に実行（常にfalse） |
 | `${{ env.VAR == 'value' }}` | 環境変数の比較 |
 | `${{ env.VAR != 'value' }}` | 環境変数の否定比較 |
 | `${{ steps.ID.outcome == 'success' }}` | ステップ結果の参照 |
@@ -317,13 +319,13 @@ raptor/
 │   ├── cli/           # CLIフラグ解析・ランナー
 │   ├── envfiles/      # GITHUB_ENV/GITHUB_PATH解析
 │   ├── executor/      # コマンド実行エンジン
+│   ├── expression/    # 条件式評価 (if条件)
 │   ├── runtime/       # 環境変数マージ処理
 │   ├── security/      # セキュリティ検証
 │   ├── util/          # Git操作ユーティリティ
 │   ├── workflow/      # ワークフローYAML解析
 │   └── worktree/      # Git worktree管理
-├── docs/              # 開発ドキュメント
-└── testdata/          # テスト用ワークフロー
+└── docs/              # 開発ドキュメント
 ```
 
 ## ライセンス
