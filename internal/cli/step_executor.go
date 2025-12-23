@@ -61,6 +61,17 @@ func NewExecutionContext(baseEnv map[string]string) *ExecutionContext {
 	}
 }
 
+// updateStepContext updates the steps context for condition evaluation.
+func (ctx *ExecutionContext) updateStepContext(stepID, outcome string) {
+	if stepID != "" {
+		ctx.StepsContext[stepID] = &expression.StepContext{
+			Outcome:    outcome,
+			Conclusion: outcome,
+			Outputs:    map[string]string{},
+		}
+	}
+}
+
 // Execute executes a single step and returns the result.
 func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionContext) (*StepResult, error) {
 	stepName := step.Name
@@ -102,15 +113,7 @@ func (se *StepExecutor) handleSkippedStep(step *workflow.Step, index int, stepNa
 		Outcome:   "skipped",
 	}
 
-	// Update steps context for skipped step
-	if step.ID != "" {
-		ctx.StepsContext[step.ID] = &expression.StepContext{
-			Outcome:    "skipped",
-			Conclusion: "skipped",
-			Outputs:    map[string]string{},
-		}
-	}
-
+	ctx.updateStepContext(step.ID, "skipped")
 	return stepResult, nil
 }
 
@@ -158,15 +161,7 @@ func (se *StepExecutor) executeStep(step *workflow.Step, index int, stepName str
 		Outcome:   outcome,
 	}
 
-	// Update steps context for condition evaluation
-	if step.ID != "" {
-		ctx.StepsContext[step.ID] = &expression.StepContext{
-			Outcome:    outcome,
-			Conclusion: outcome,
-			Outputs:    map[string]string{},
-		}
-	}
-
+	ctx.updateStepContext(step.ID, outcome)
 	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 
 	// Update accumulated environment from GITHUB_ENV

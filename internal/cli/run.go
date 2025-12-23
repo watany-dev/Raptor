@@ -91,7 +91,6 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	// Print security warning
 	r.printSecurityWarning(opts)
 
-	// Setup run context (worktree if isolate mode, or working directory otherwise)
 	runCtx, cleanup, err := r.setupRunContext(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -126,9 +125,7 @@ func (r *Runner) executeJobs(wf *workflow.WorkflowFile, jobIDs []string, opts *R
 	return results, nil
 }
 
-// setupRunContext sets up the execution context.
-// All workflows run in isolated git worktrees for security.
-// Returns a cleanup function that should be called when execution is complete.
+// setupRunContext sets up an isolated git worktree for secure execution.
 func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runContext, func(), error) {
 	noopCleanup := func() {}
 

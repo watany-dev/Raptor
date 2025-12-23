@@ -8,17 +8,10 @@ import (
 
 // RunOptions contains the options for the run command.
 type RunOptions struct {
-	// Workflow is the path to the workflow file.
-	Workflow string
-	// Job is the job ID to run.
-	Job string
-	// WorkingDir is the working directory for execution.
-	WorkingDir string
-	// Isolate is always true - workflows run in isolated git worktree for security.
-	// This field is kept for internal use but the flag has been removed.
-	Isolate bool
-	// DryRun shows what would be executed without actually running commands.
-	DryRun bool
+	Workflow   string // Path to the workflow file
+	Job        string // Job ID to run (if omitted, runs all jobs)
+	WorkingDir string // Working directory for execution
+	DryRun     bool   // Show what would be executed without running
 }
 
 // ParseRunFlags parses command-line flags for the run command.
@@ -36,15 +29,9 @@ func ParseRunFlags(args []string) (*RunOptions, error) {
 	fs.BoolVar(&opts.DryRun, "dry-run", false, "Show what would be executed without running")
 	fs.BoolVar(&opts.DryRun, "n", false, "Show what would be executed (shorthand)")
 
-	// Note: --isolate flag has been removed. Isolated execution is now mandatory for security.
-	// All workflows run in isolated git worktrees.
-
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}
-
-	// Always enable isolated execution for security
-	opts.Isolate = true
 
 	// Validate required fields
 	if opts.Workflow == "" {

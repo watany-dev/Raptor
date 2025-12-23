@@ -49,26 +49,16 @@ func (ce *ConditionEvaluator) Evaluate(
 		cond = strings.TrimSpace(cond[3 : len(cond)-2])
 	}
 
-	// Handle boolean literals
-	if cond == "true" {
+	// Handle literals and status functions
+	switch cond {
+	case "true", "always()":
 		return true, nil
-	}
-	if cond == "false" {
+	case "false", "cancelled()":
 		return false, nil
-	}
-
-	// Handle status check functions
-	if cond == "always()" {
-		return true, nil
-	}
-	if cond == "success()" {
+	case "success()":
 		return jobSuccess, nil
-	}
-	if cond == "failure()" {
+	case "failure()":
 		return !jobSuccess, nil
-	}
-	if cond == "cancelled()" {
-		return false, nil // We don't support cancellation yet
 	}
 
 	// Handle env.VAR == 'value' comparisons
