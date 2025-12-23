@@ -329,7 +329,7 @@ jobs:
 	}
 
 	b.ResetTimer()
-	for range b.N {
+	for b.Loop() {
 		_, err := LoadWorkflowFile(workflowPath)
 		if err != nil {
 			b.Fatalf("LoadWorkflowFile() error = %v", err)

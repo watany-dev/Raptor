@@ -1,24 +1,23 @@
 package runtime
 
+import "maps"
+
 // MergeEnv merges multiple environment variable maps in order.
 // Later maps override values from earlier maps.
 // This is used to merge environment variables in the order:
 // workflow -> job -> step
-func MergeEnv(maps ...map[string]string) map[string]string {
+func MergeEnv(envMaps ...map[string]string) map[string]string {
 	// Pre-calculate total size for efficient allocation
 	totalSize := 0
-	for _, m := range maps {
+	for _, m := range envMaps {
 		totalSize += len(m)
 	}
 
 	result := make(map[string]string, totalSize)
 
-	for _, m := range maps {
-		if m == nil {
-			continue
-		}
-		for key, value := range m {
-			result[key] = value
+	for _, m := range envMaps {
+		if m != nil {
+			maps.Copy(result, m)
 		}
 	}
 
