@@ -30,6 +30,9 @@ type Step struct {
 	ID string `yaml:"id"`
 	// Name is an optional display name for the step.
 	Name string `yaml:"name"`
+	// If contains the condition expression for this step.
+	// If the condition evaluates to false, the step is skipped.
+	If string `yaml:"if"`
 	// Run contains the shell command to execute.
 	Run string `yaml:"run"`
 	// Env contains environment variables for this step.

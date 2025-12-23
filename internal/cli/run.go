@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/watany-dev/raptor/internal/envfiles"
@@ -43,9 +44,12 @@ func (r *Runner) SetOutput(stdout, stderr io.Writer) {
 type StepResult struct {
 	StepIndex int
 	StepName  string
+	StepID    string
 	ExitCode  int
 	Stdout    string
 	Stderr    string
+	Skipped   bool
+	Outcome   string // "success", "failure", or "skipped"
 }
 
 // RunResult contains the results of running a job.
@@ -192,6 +196,10 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 	accumulatedEnv["GITHUB_ENV"] = envFilePath
 	accumulatedEnv["GITHUB_PATH"] = pathFilePath
 
+	// Track step results for condition evaluation (steps context)
+	stepsContext := make(map[string]*stepContext)
+	jobSuccess := true // Track overall job success for success()/failure() functions
+
 	// Execute steps sequentially
 	for i, step := range job.Steps {
 		stepName := step.Name
@@ -203,6 +211,39 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 
 		// Merge step-level env
 		stepEnv := runtime.MergeEnv(accumulatedEnv, step.Env)
+
+		// Evaluate if condition
+		shouldRun, err := r.evaluateStepCondition(step.If, stepEnv, stepsContext, jobSuccess, runCtx.workDir)
+		if err != nil {
+			fmt.Fprintf(r.stderr, "Warning: failed to evaluate if condition: %v\n", err)
+			// On evaluation error, default to running the step
+			shouldRun = true
+		}
+
+		if !shouldRun {
+			fmt.Fprintf(r.stdout, "Skipping step (condition evaluated to false)\n")
+			fmt.Fprintf(r.stdout, "::endgroup::\n")
+
+			stepResult := StepResult{
+				StepIndex: i,
+				StepName:  stepName,
+				StepID:    step.ID,
+				ExitCode:  0,
+				Skipped:   true,
+				Outcome:   "skipped",
+			}
+			result.StepResults = append(result.StepResults, stepResult)
+
+			// Update steps context for skipped step
+			if step.ID != "" {
+				stepsContext[step.ID] = &stepContext{
+					outcome:    "skipped",
+					conclusion: "skipped",
+					outputs:    map[string]string{},
+				}
+			}
+			continue
+		}
 
 		// Validate and determine working directory
 		workDir := runCtx.workDir
@@ -239,21 +280,41 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 			}
 		}
 
+		// Determine outcome
+		outcome := "success"
+		if execResult.ExitCode != 0 {
+			outcome = "failure"
+			jobSuccess = false
+		}
+
 		stepResult := StepResult{
 			StepIndex: i,
 			StepName:  stepName,
+			StepID:    step.ID,
 			ExitCode:  execResult.ExitCode,
 			Stdout:    execResult.Stdout,
 			Stderr:    execResult.Stderr,
+			Skipped:   false,
+			Outcome:   outcome,
 		}
 		result.StepResults = append(result.StepResults, stepResult)
+
+		// Update steps context for condition evaluation
+		if step.ID != "" {
+			stepsContext[step.ID] = &stepContext{
+				outcome:    outcome,
+				conclusion: outcome,
+				outputs:    map[string]string{},
+			}
+		}
 
 		fmt.Fprintf(r.stdout, "::endgroup::\n")
 
 		// Check if step failed
 		if execResult.ExitCode != 0 {
 			result.Success = false
-			return result, nil
+			// Continue to allow always()/failure() steps to run
+			// The loop will skip non-always/failure steps due to jobSuccess=false
 		}
 
 		// Update accumulated environment from GITHUB_ENV
@@ -287,6 +348,88 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 	}
 
 	return result, nil
+}
+
+// stepContext holds the result of a step for condition evaluation.
+type stepContext struct {
+	outcome    string            // "success", "failure", or "skipped"
+	conclusion string            // "success", "failure", or "skipped"
+	outputs    map[string]string // step outputs
+}
+
+// evaluateStepCondition evaluates the if condition for a step.
+// Returns true if the step should run, false if it should be skipped.
+func (r *Runner) evaluateStepCondition(
+	condition string,
+	env map[string]string,
+	stepsContext map[string]*stepContext,
+	jobSuccess bool,
+	workDir string,
+) (bool, error) {
+	// If no condition is specified, use default behavior (run if previous steps succeeded)
+	if condition == "" {
+		return jobSuccess, nil
+	}
+
+	// Normalize condition: remove ${{ }} wrapper if present
+	cond := strings.TrimSpace(condition)
+	if strings.HasPrefix(cond, "${{") && strings.HasSuffix(cond, "}}") {
+		cond = strings.TrimSpace(cond[3 : len(cond)-2])
+	}
+
+	// Handle boolean literals
+	if cond == "true" {
+		return true, nil
+	}
+	if cond == "false" {
+		return false, nil
+	}
+
+	// Handle status check functions
+	if cond == "always()" {
+		return true, nil
+	}
+	if cond == "success()" {
+		return jobSuccess, nil
+	}
+	if cond == "failure()" {
+		return !jobSuccess, nil
+	}
+	if cond == "cancelled()" {
+		return false, nil // We don't support cancellation yet
+	}
+
+	// Handle env.VAR == 'value' comparisons
+	envCompareRegex := regexp.MustCompile(`env\.(\w+)\s*==\s*'([^']*)'`)
+	if matches := envCompareRegex.FindStringSubmatch(cond); matches != nil {
+		varName := matches[1]
+		expectedValue := matches[2]
+		actualValue := env[varName]
+		return actualValue == expectedValue, nil
+	}
+
+	// Handle env.VAR != 'value' comparisons
+	envNotEqualRegex := regexp.MustCompile(`env\.(\w+)\s*!=\s*'([^']*)'`)
+	if matches := envNotEqualRegex.FindStringSubmatch(cond); matches != nil {
+		varName := matches[1]
+		expectedValue := matches[2]
+		actualValue := env[varName]
+		return actualValue != expectedValue, nil
+	}
+
+	// Handle steps.ID.outcome == 'value' comparisons
+	stepsOutcomeRegex := regexp.MustCompile(`steps\.(\w+)\.outcome\s*==\s*'([^']*)'`)
+	if matches := stepsOutcomeRegex.FindStringSubmatch(cond); matches != nil {
+		stepID := matches[1]
+		expectedOutcome := matches[2]
+		if step, ok := stepsContext[stepID]; ok {
+			return step.outcome == expectedOutcome, nil
+		}
+		return false, nil
+	}
+
+	// For unsupported expressions, default to running the step (with warning)
+	return true, fmt.Errorf("unsupported condition syntax: %s (defaulting to true)", cond)
 }
 
 // printSecurityWarning prints a security warning before execution.
