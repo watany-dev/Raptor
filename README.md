@@ -101,8 +101,51 @@ raptor run --workflow <ワークフローファイル>
 | `--workflow` | `-w` | ワークフローファイルへのパス (必須) |
 | `--job` | `-j` | 実行するジョブID (省略時は全ジョブ実行) |
 | `--workdir` | `-C` | 作業ディレクトリ (デフォルト: カレントディレクトリ) |
+| `--dry-run` | `-n` | 実際に実行せずプレビュー表示 |
 
 **注意**: すべてのワークフローはセキュリティのため隔離されたGit worktreeで実行されます。
+
+### Dry-run モード
+
+Dry-runモードを使うと、ワークフローを実際に実行せずに、何が実行されるかをプレビューできます。CIパイプラインの確認やデバッグに便利です。
+
+```bash
+# 明示的に dry-run フラグを指定
+raptor run -w ci.yml --dry-run
+raptor run -w ci.yml -n
+
+# run サブコマンドを省略すると自動的に dry-run モード
+raptor -w ci.yml
+```
+
+Dry-runモードの出力例:
+
+```
+🔍 DRY RUN MODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Workflow: .github/workflows/ci.yml
+Name: CI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📋 Job: build
+   Runs-on: ubuntu-latest
+
+   [1] Setup
+       Command:
+         echo "Setting up..."
+
+   [2] Build
+       Command:
+         echo "Building..."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+To execute this workflow, use: raptor run -w .github/workflows/ci.yml
+```
+
+表示される情報:
+- ワークフロー名とパス
+- ジョブID、名前、runs-on
+- 各ステップの名前、作業ディレクトリ、条件 (`if`)、環境変数の数、コマンド内容
 
 ### 使用例
 
