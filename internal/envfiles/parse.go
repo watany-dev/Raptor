@@ -99,7 +99,7 @@ func ParseEnvFile(path string) (map[string]string, error) {
 // Each line in the file is a path to add.
 // If the file doesn't exist, an empty slice is returned without error.
 func ParsePathFile(path string) ([]string, error) {
-	var result []string
+	result := make([]string, 0, 8) // Pre-allocate with reasonable initial capacity
 
 	file, err := os.Open(path)
 	if err != nil {

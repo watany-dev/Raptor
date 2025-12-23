@@ -47,15 +47,15 @@ func DiscoverWorkflows(repoRoot string) ([]string, error) {
 		return nil, fmt.Errorf("failed to read workflows directory: %w", err)
 	}
 
-	var workflows []string
+	workflows := make([]string, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 
 		name := entry.Name()
-		ext := strings.ToLower(filepath.Ext(name))
-		if ext == ".yml" || ext == ".yaml" {
+		ext := filepath.Ext(name)
+		if strings.EqualFold(ext, ".yml") || strings.EqualFold(ext, ".yaml") {
 			workflows = append(workflows, filepath.Join(workflowsDir, name))
 		}
 	}
