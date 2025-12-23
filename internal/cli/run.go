@@ -6,13 +6,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
-	"github.com/watany-dev/raptor/internal/envfiles"
 	"github.com/watany-dev/raptor/internal/executor"
+	"github.com/watany-dev/raptor/internal/expression"
 	"github.com/watany-dev/raptor/internal/runtime"
-	"github.com/watany-dev/raptor/internal/security"
 	"github.com/watany-dev/raptor/internal/util"
 	"github.com/watany-dev/raptor/internal/workflow"
 	"github.com/watany-dev/raptor/internal/worktree"
@@ -20,17 +17,19 @@ import (
 
 // Runner handles the execution of workflow jobs.
 type Runner struct {
-	executor executor.Executor
-	stdout   io.Writer
-	stderr   io.Writer
+	executor  executor.Executor
+	evaluator *expression.ConditionEvaluator
+	stdout    io.Writer
+	stderr    io.Writer
 }
 
 // NewRunner creates a new Runner with the given executor.
 func NewRunner(exec executor.Executor) *Runner {
 	return &Runner{
-		executor: exec,
-		stdout:   os.Stdout,
-		stderr:   os.Stderr,
+		executor:  exec,
+		evaluator: expression.NewConditionEvaluator(),
+		stdout:    os.Stdout,
+		stderr:    os.Stderr,
 	}
 }
 
@@ -81,18 +80,12 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	}
 
 	// Determine which jobs to run
-	var jobIDs []string
-	if opts.Job != "" {
-		// Run specific job
-		jobIDs = []string{opts.Job}
-	} else {
-		// Run all jobs in definition order
-		jobIDs = wf.JobOrder
-	}
+	jobIDs := r.determineJobIDs(wf, opts)
 
 	// Dry-run mode: show what would be executed without running
 	if opts.DryRun {
-		return r.dryRun(wf, jobIDs, opts)
+		formatter := NewDryRunFormatter(r.stdout)
+		return formatter.Format(wf, jobIDs, opts.Workflow)
 	}
 
 	// Print security warning
@@ -105,6 +98,19 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	}
 	defer cleanup()
 
+	return r.executeJobs(wf, jobIDs, opts, runCtx)
+}
+
+// determineJobIDs determines which jobs to run based on options.
+func (r *Runner) determineJobIDs(wf *workflow.WorkflowFile, opts *RunOptions) []string {
+	if opts.Job != "" {
+		return []string{opts.Job}
+	}
+	return wf.JobOrder
+}
+
+// executeJobs executes the specified jobs sequentially.
+func (r *Runner) executeJobs(wf *workflow.WorkflowFile, jobIDs []string, opts *RunOptions, runCtx *runContext) ([]*RunResult, error) {
 	var results []*RunResult
 	for _, jobID := range jobIDs {
 		result, err := r.runJob(wf, jobID, opts, runCtx)
@@ -117,7 +123,6 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 			return results, nil
 		}
 	}
-
 	return results, nil
 }
 
@@ -144,7 +149,7 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 		return nil, noopCleanup, fmt.Errorf("failed to create workspace: %w", err)
 	}
 
-	fmt.Fprintf(r.stdout, "Created isolated workspace: %s\n", ws.Path)
+	_, _ = fmt.Fprintf(r.stdout, "Created isolated workspace: %s\n", ws.Path)
 
 	// Get git info from original repo
 	sha, _ := util.GitHeadSHA(ctx, repoRoot)
@@ -152,9 +157,9 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 
 	cleanup := func() {
 		if err := worktree.RemoveWorkspace(ctx, ws); err != nil {
-			fmt.Fprintf(r.stderr, "Warning: failed to remove workspace: %v\n", err)
+			_, _ = fmt.Fprintf(r.stderr, "Warning: failed to remove workspace: %v\n", err)
 		} else {
-			fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
+			_, _ = fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
 		}
 	}
 
@@ -175,7 +180,7 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 		return nil, fmt.Errorf("failed to select job: %w", err)
 	}
 
-	fmt.Fprintf(r.stdout, "=== Running job: %s ===\n", jobID)
+	_, _ = fmt.Fprintf(r.stdout, "=== Running job: %s ===\n", jobID)
 
 	result := &RunResult{
 		JobID:       jobID,
@@ -201,327 +206,49 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 	accumulatedEnv["GITHUB_ENV"] = envFilePath
 	accumulatedEnv["GITHUB_PATH"] = pathFilePath
 
-	// Track step results for condition evaluation (steps context)
-	stepsContext := make(map[string]*stepContext)
-	jobSuccess := true // Track overall job success for success()/failure() functions
+	// Create execution context
+	execCtx := NewExecutionContext(accumulatedEnv)
+
+	// Create step executor
+	stepExecutor := NewStepExecutor(
+		r.executor,
+		r.evaluator,
+		r.stdout,
+		r.stderr,
+		runCtx.workDir,
+		envFilePath,
+		pathFilePath,
+	)
 
 	// Execute steps sequentially
 	for i, step := range job.Steps {
-		stepName := step.Name
-		if stepName == "" {
-			stepName = fmt.Sprintf("Step %d", i+1)
-		}
-
-		fmt.Fprintf(r.stdout, "::group::%s\n", stepName)
-
-		// Merge step-level env
-		stepEnv := runtime.MergeEnv(accumulatedEnv, step.Env)
-
-		// Evaluate if condition
-		shouldRun, err := r.evaluateStepCondition(step.If, stepEnv, stepsContext, jobSuccess, runCtx.workDir)
+		stepResult, err := stepExecutor.Execute(&step, i, execCtx)
 		if err != nil {
-			fmt.Fprintf(r.stderr, "Warning: failed to evaluate if condition: %v\n", err)
-			// On evaluation error, default to running the step
-			shouldRun = true
+			return nil, err
 		}
 
-		if !shouldRun {
-			fmt.Fprintf(r.stdout, "Skipping step (condition evaluated to false)\n")
-			fmt.Fprintf(r.stdout, "::endgroup::\n")
-
-			stepResult := StepResult{
-				StepIndex: i,
-				StepName:  stepName,
-				StepID:    step.ID,
-				ExitCode:  0,
-				Skipped:   true,
-				Outcome:   "skipped",
-			}
-			result.StepResults = append(result.StepResults, stepResult)
-
-			// Update steps context for skipped step
-			if step.ID != "" {
-				stepsContext[step.ID] = &stepContext{
-					outcome:    "skipped",
-					conclusion: "skipped",
-					outputs:    map[string]string{},
-				}
-			}
-			continue
-		}
-
-		// Validate and determine working directory
-		workDir := runCtx.workDir
-		if step.WorkingDirectory != "" {
-			// Validate working directory for security
-			if err := security.ValidateWorkingDirectory(step.WorkingDirectory, runCtx.workDir); err != nil {
-				return nil, fmt.Errorf("step %q: %w", stepName, err)
-			}
-			// Path is validated, safe to use
-			workDir = filepath.Join(runCtx.workDir, filepath.Clean(step.WorkingDirectory))
-		}
-
-		// Execute the step
-		execResult, err := r.executor.Execute(executor.Config{
-			Command:    step.Run,
-			Env:        stepEnv,
-			WorkingDir: workDir,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("failed to execute step %q: %w", stepName, err)
-		}
-
-		// Print step output
-		if execResult.Stdout != "" {
-			fmt.Fprint(r.stdout, execResult.Stdout)
-			if !strings.HasSuffix(execResult.Stdout, "\n") {
-				fmt.Fprintln(r.stdout)
-			}
-		}
-		if execResult.Stderr != "" {
-			fmt.Fprint(r.stderr, execResult.Stderr)
-			if !strings.HasSuffix(execResult.Stderr, "\n") {
-				fmt.Fprintln(r.stderr)
-			}
-		}
-
-		// Determine outcome
-		outcome := "success"
-		if execResult.ExitCode != 0 {
-			outcome = "failure"
-			jobSuccess = false
-		}
-
-		stepResult := StepResult{
-			StepIndex: i,
-			StepName:  stepName,
-			StepID:    step.ID,
-			ExitCode:  execResult.ExitCode,
-			Stdout:    execResult.Stdout,
-			Stderr:    execResult.Stderr,
-			Skipped:   false,
-			Outcome:   outcome,
-		}
-		result.StepResults = append(result.StepResults, stepResult)
-
-		// Update steps context for condition evaluation
-		if step.ID != "" {
-			stepsContext[step.ID] = &stepContext{
-				outcome:    outcome,
-				conclusion: outcome,
-				outputs:    map[string]string{},
-			}
-		}
-
-		fmt.Fprintf(r.stdout, "::endgroup::\n")
+		result.StepResults = append(result.StepResults, *stepResult)
 
 		// Check if step failed
-		if execResult.ExitCode != 0 {
+		if stepResult.ExitCode != 0 {
 			result.Success = false
 			// Continue to allow always()/failure() steps to run
-			// The loop will skip non-always/failure steps due to jobSuccess=false
-		}
-
-		// Update accumulated environment from GITHUB_ENV
-		newEnv, err := envfiles.ParseEnvFile(envFilePath)
-		if err != nil {
-			// Print detailed security error message
-			fmt.Fprintln(r.stderr, "")
-			fmt.Fprintln(r.stderr, "❌ Security Error:")
-			fmt.Fprintln(r.stderr, err.Error())
-			fmt.Fprintln(r.stderr, "")
-			fmt.Fprintln(r.stderr, "This restriction protects your system from potentially malicious workflows.")
-			fmt.Fprintln(r.stderr, "See: https://github.com/watany-dev/raptor/blob/main/SECURITY.md")
-			fmt.Fprintln(r.stderr, "")
-
-			return nil, fmt.Errorf("security validation failed: %w", err)
-		}
-		accumulatedEnv = runtime.MergeEnv(accumulatedEnv, newEnv)
-
-		// Update PATH from GITHUB_PATH
-		newPaths, err := envfiles.ParsePathFile(pathFilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse GITHUB_PATH: %w", err)
-		}
-		if len(newPaths) > 0 {
-			currentPath := accumulatedEnv["PATH"]
-			if currentPath == "" {
-				currentPath = os.Getenv("PATH")
-			}
-			accumulatedEnv["PATH"] = envfiles.PrependPath(currentPath, newPaths)
 		}
 	}
 
 	return result, nil
 }
 
-// stepContext holds the result of a step for condition evaluation.
-type stepContext struct {
-	outcome    string            // "success", "failure", or "skipped"
-	conclusion string            // "success", "failure", or "skipped"
-	outputs    map[string]string // step outputs
-}
-
-// evaluateStepCondition evaluates the if condition for a step.
-// Returns true if the step should run, false if it should be skipped.
-func (r *Runner) evaluateStepCondition(
-	condition string,
-	env map[string]string,
-	stepsContext map[string]*stepContext,
-	jobSuccess bool,
-	workDir string,
-) (bool, error) {
-	// If no condition is specified, use default behavior (run if previous steps succeeded)
-	if condition == "" {
-		return jobSuccess, nil
-	}
-
-	// Normalize condition: remove ${{ }} wrapper if present
-	cond := strings.TrimSpace(condition)
-	if strings.HasPrefix(cond, "${{") && strings.HasSuffix(cond, "}}") {
-		cond = strings.TrimSpace(cond[3 : len(cond)-2])
-	}
-
-	// Handle boolean literals
-	if cond == "true" {
-		return true, nil
-	}
-	if cond == "false" {
-		return false, nil
-	}
-
-	// Handle status check functions
-	if cond == "always()" {
-		return true, nil
-	}
-	if cond == "success()" {
-		return jobSuccess, nil
-	}
-	if cond == "failure()" {
-		return !jobSuccess, nil
-	}
-	if cond == "cancelled()" {
-		return false, nil // We don't support cancellation yet
-	}
-
-	// Handle env.VAR == 'value' comparisons
-	envCompareRegex := regexp.MustCompile(`env\.(\w+)\s*==\s*'([^']*)'`)
-	if matches := envCompareRegex.FindStringSubmatch(cond); matches != nil {
-		varName := matches[1]
-		expectedValue := matches[2]
-		actualValue := env[varName]
-		return actualValue == expectedValue, nil
-	}
-
-	// Handle env.VAR != 'value' comparisons
-	envNotEqualRegex := regexp.MustCompile(`env\.(\w+)\s*!=\s*'([^']*)'`)
-	if matches := envNotEqualRegex.FindStringSubmatch(cond); matches != nil {
-		varName := matches[1]
-		expectedValue := matches[2]
-		actualValue := env[varName]
-		return actualValue != expectedValue, nil
-	}
-
-	// Handle steps.ID.outcome == 'value' comparisons
-	stepsOutcomeRegex := regexp.MustCompile(`steps\.(\w+)\.outcome\s*==\s*'([^']*)'`)
-	if matches := stepsOutcomeRegex.FindStringSubmatch(cond); matches != nil {
-		stepID := matches[1]
-		expectedOutcome := matches[2]
-		if step, ok := stepsContext[stepID]; ok {
-			return step.outcome == expectedOutcome, nil
-		}
-		return false, nil
-	}
-
-	// For unsupported expressions, default to running the step (with warning)
-	return true, fmt.Errorf("unsupported condition syntax: %s (defaulting to true)", cond)
-}
-
 // printSecurityWarning prints a security warning before execution.
 func (r *Runner) printSecurityWarning(opts *RunOptions) {
-	fmt.Fprintln(r.stderr, "")
-	fmt.Fprintln(r.stderr, "⚠️  SECURITY WARNING")
-	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(r.stderr, "This tool executes commands from workflow files with your user privileges.")
-	fmt.Fprintln(r.stderr, "Only run workflows from trusted sources.")
-	fmt.Fprintln(r.stderr, "")
-	fmt.Fprintf(r.stderr, "Workflow: %s\n", opts.Workflow)
-	fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
-	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(r.stderr, "")
-}
-
-// dryRun shows what would be executed without actually running commands.
-func (r *Runner) dryRun(wf *workflow.WorkflowFile, jobIDs []string, opts *RunOptions) ([]*RunResult, error) {
-	fmt.Fprintln(r.stdout, "")
-	fmt.Fprintln(r.stdout, "🔍 DRY RUN MODE")
-	fmt.Fprintln(r.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintf(r.stdout, "Workflow: %s\n", opts.Workflow)
-	if wf.Name != "" {
-		fmt.Fprintf(r.stdout, "Name: %s\n", wf.Name)
-	}
-	fmt.Fprintln(r.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(r.stdout, "")
-
-	var results []*RunResult
-
-	for _, jobID := range jobIDs {
-		job, err := workflow.SelectJob(wf, jobID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to select job: %w", err)
-		}
-
-		fmt.Fprintf(r.stdout, "📋 Job: %s\n", jobID)
-		if job.Name != "" && job.Name != jobID {
-			fmt.Fprintf(r.stdout, "   Name: %s\n", job.Name)
-		}
-		if job.RunsOn != "" {
-			fmt.Fprintf(r.stdout, "   Runs-on: %s\n", job.RunsOn)
-		}
-		fmt.Fprintln(r.stdout, "")
-
-		result := &RunResult{
-			JobID:       jobID,
-			Success:     true,
-			StepResults: make([]StepResult, 0, len(job.Steps)),
-		}
-
-		for i, step := range job.Steps {
-			stepName := step.Name
-			if stepName == "" {
-				stepName = fmt.Sprintf("Step %d", i+1)
-			}
-
-			fmt.Fprintf(r.stdout, "   [%d] %s\n", i+1, stepName)
-			if step.WorkingDirectory != "" {
-				fmt.Fprintf(r.stdout, "       Working directory: %s\n", step.WorkingDirectory)
-			}
-			if len(step.Env) > 0 {
-				fmt.Fprintf(r.stdout, "       Environment: %d variable(s)\n", len(step.Env))
-			}
-			if step.Run != "" {
-				// Show the command, indented
-				lines := strings.Split(strings.TrimSpace(step.Run), "\n")
-				fmt.Fprintln(r.stdout, "       Command:")
-				for _, line := range lines {
-					fmt.Fprintf(r.stdout, "         %s\n", line)
-				}
-			}
-			fmt.Fprintln(r.stdout, "")
-
-			result.StepResults = append(result.StepResults, StepResult{
-				StepIndex: i,
-				StepName:  stepName,
-				ExitCode:  0,
-			})
-		}
-
-		results = append(results, result)
-	}
-
-	fmt.Fprintln(r.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(r.stdout, "To execute this workflow, use: raptor run -w", opts.Workflow)
-	fmt.Fprintln(r.stdout, "")
-
-	return results, nil
+	_, _ = fmt.Fprintln(r.stderr, "")
+	_, _ = fmt.Fprintln(r.stderr, "⚠️  SECURITY WARNING")
+	_, _ = fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(r.stderr, "This tool executes commands from workflow files with your user privileges.")
+	_, _ = fmt.Fprintln(r.stderr, "Only run workflows from trusted sources.")
+	_, _ = fmt.Fprintln(r.stderr, "")
+	_, _ = fmt.Fprintf(r.stderr, "Workflow: %s\n", opts.Workflow)
+	_, _ = fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
+	_, _ = fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(r.stderr, "")
 }
