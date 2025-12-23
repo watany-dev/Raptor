@@ -363,62 +363,29 @@ func TestRunCommand_ParseError(t *testing.T) {
 	}
 }
 
-// TestMain_Subprocess tests main() by running as a subprocess
-// This provides coverage for the main entry point
-func TestMain_Subprocess(t *testing.T) {
-	if os.Getenv("TEST_MAIN_SUBPROCESS") == "1" {
-		main()
-		return
-	}
-
-	if testing.Short() {
-		t.Skip("skipping subprocess test in short mode")
-	}
-
+// TestRun_Commands tests that the run() function handles all command types correctly
+// This provides coverage for the CLI entry points without needing subprocess testing
+func TestRun_Commands(t *testing.T) {
 	tests := []struct {
-		name       string
-		args       []string
-		wantExit   int
-		wantOutput string
+		name    string
+		args    []string
+		wantErr bool
 	}{
-		{
-			name:       "help command",
-			args:       []string{"help"},
-			wantExit:   0,
-			wantOutput: "Usage:",
-		},
-		{
-			name:       "version command",
-			args:       []string{"version"},
-			wantExit:   0,
-			wantOutput: "raptor",
-		},
+		{"empty args", []string{}, false},
+		{"help command", []string{"help"}, false},
+		{"help flag -h", []string{"-h"}, false},
+		{"help flag --help", []string{"--help"}, false},
+		{"version command", []string{"version"}, false},
+		{"version flag -v", []string{"-v"}, false},
+		{"version flag --version", []string{"--version"}, false},
+		{"unknown command", []string{"unknown"}, true},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cmd := exec.Command(os.Args[0], "-test.run=TestMain_Subprocess")
-			cmd.Env = append(os.Environ(), "TEST_MAIN_SUBPROCESS=1")
-			for _, arg := range tt.args {
-				cmd.Args = append(cmd.Args, "--", arg)
-			}
-
-			output, err := cmd.CombinedOutput()
-
-			// Check exit code through error type
-			if err != nil {
-				if exitErr, ok := err.(*exec.ExitError); ok {
-					if exitErr.ExitCode() != tt.wantExit {
-						t.Errorf("exit code = %d; want %d", exitErr.ExitCode(), tt.wantExit)
-					}
-				}
-			} else if tt.wantExit != 0 {
-				t.Errorf("expected exit code %d, got 0", tt.wantExit)
-			}
-
-			// Check expected output
-			if tt.wantOutput != "" && !strings.Contains(string(output), tt.wantOutput) {
-				t.Errorf("output = %q; want to contain %q", string(output), tt.wantOutput)
+			err := run(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("run(%v) error = %v; wantErr %v", tt.args, err, tt.wantErr)
 			}
 		})
 	}
