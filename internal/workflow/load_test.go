@@ -305,7 +305,7 @@ env:
 jobs:
 `
 	// Add multiple jobs with multiple steps
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		yamlContent += fmt.Sprintf(`  job%d:
     name: Job %d
     runs-on: ubuntu-latest
@@ -313,7 +313,7 @@ jobs:
       JOB_VAR: job_value_%d
     steps:
 `, i, i, i)
-		for j := 0; j < 5; j++ {
+		for j := range 5 {
 			yamlContent += fmt.Sprintf(`      - name: Step %d-%d
         run: echo "Running step %d in job %d"
         env:
@@ -329,7 +329,7 @@ jobs:
 	}
 
 	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
+	for range b.N {
 		_, err := LoadWorkflowFile(workflowPath)
 		if err != nil {
 			b.Fatalf("LoadWorkflowFile() error = %v", err)
@@ -392,7 +392,7 @@ func TestLoadWorkflowFile_LargeFile(t *testing.T) {
 	// Create a large workflow file with many jobs
 	var yamlContent strings.Builder
 	yamlContent.WriteString("name: Large Workflow\njobs:\n")
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		yamlContent.WriteString(fmt.Sprintf("  job%d:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n", i))
 	}
 

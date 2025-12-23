@@ -383,22 +383,20 @@ func TestHostExecutor_Execute_NilEnv(t *testing.T) {
 	}
 }
 
-// TestHostExecutor_getCachedSysEnv tests the environment caching
-func TestHostExecutor_getCachedSysEnv(t *testing.T) {
-	executor := NewHostExecutor()
-
+// TestGetSysEnv tests the environment caching using sync.OnceValue
+func TestGetSysEnv(t *testing.T) {
 	// First call should cache
-	env1 := executor.getCachedSysEnv()
+	env1 := getSysEnv()
 	if len(env1) == 0 {
-		t.Error("getCachedSysEnv() should return non-empty env")
+		t.Error("getSysEnv() should return non-empty env")
 	}
 
-	// Second call should return cached value
-	env2 := executor.getCachedSysEnv()
+	// Second call should return cached value (same slice)
+	env2 := getSysEnv()
 
-	// Should be the same slice
-	if len(env1) != len(env2) {
-		t.Error("getCachedSysEnv() should return consistent results")
+	// Should be the same slice (pointer equality)
+	if &env1[0] != &env2[0] {
+		t.Error("getSysEnv() should return the same cached slice")
 	}
 }
 

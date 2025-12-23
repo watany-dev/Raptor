@@ -221,7 +221,7 @@ func TestCreateWorkspace_Verified(t *testing.T) {
 func TestGenerateID(t *testing.T) {
 	t.Run("generates unique IDs", func(t *testing.T) {
 		ids := make(map[string]bool)
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			id, err := generateID()
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -307,7 +307,7 @@ func TestGenerateID_Uniqueness(t *testing.T) {
 	seen := make(map[string]bool)
 	iterations := 1000
 
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		id, err := generateID()
 		if err != nil {
 			t.Fatalf("generateID() error = %v", err)
@@ -410,7 +410,7 @@ func TestCreateWorkspace_ConcurrentCreation(t *testing.T) {
 
 	// Create multiple workspaces in sequence
 	workspaces := make([]*Workspace, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		ws, err := CreateWorkspace(ctx, repoRoot, false)
 		if err != nil {
 			t.Fatalf("CreateWorkspace() %d error = %v", i, err)

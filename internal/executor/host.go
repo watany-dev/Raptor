@@ -1,31 +1,25 @@
 package executor
 
 import (
-	"bytes"
 	"errors"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 )
 
+// getSysEnv returns the cached system environment variables.
+// Uses sync.OnceValue (Go 1.21+) for thread-safe lazy initialization.
+var getSysEnv = sync.OnceValue(func() []string {
+	return os.Environ()
+})
+
 // HostExecutor executes commands on the host system using a shell.
-type HostExecutor struct {
-	cachedSysEnv []string
-	once         sync.Once
-}
+type HostExecutor struct{}
 
 // NewHostExecutor creates a new HostExecutor instance.
 func NewHostExecutor() *HostExecutor {
 	return &HostExecutor{}
-}
-
-// getCachedSysEnv returns the cached system environment variables.
-// The cache is populated on first call using sync.Once for thread safety.
-func (h *HostExecutor) getCachedSysEnv() []string {
-	h.once.Do(func() {
-		h.cachedSysEnv = os.Environ()
-	})
-	return h.cachedSysEnv
 }
 
 // Execute runs the given command on the host system.
@@ -40,7 +34,7 @@ func (h *HostExecutor) Execute(config Config) (Result, error) {
 	// Set environment variables
 	if len(config.Env) > 0 {
 		// Use cached system environment to avoid repeated os.Environ() calls
-		sysEnv := h.getCachedSysEnv()
+		sysEnv := getSysEnv()
 		cmd.Env = make([]string, len(sysEnv), len(sysEnv)+len(config.Env))
 		copy(cmd.Env, sysEnv)
 		// Add custom environment variables
@@ -49,7 +43,7 @@ func (h *HostExecutor) Execute(config Config) (Result, error) {
 		}
 	}
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
