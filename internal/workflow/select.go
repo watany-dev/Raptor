@@ -33,7 +33,7 @@ func DiscoverWorkflows(repoRoot string) ([]string, error) {
 	info, err := os.Stat(workflowsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("workflows directory does not exist: %s", workflowsDir)
+			return nil, fmt.Errorf("workflows directory does not exist: %w", err)
 		}
 		return nil, fmt.Errorf("failed to access workflows directory: %w", err)
 	}

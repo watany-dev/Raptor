@@ -52,7 +52,7 @@ func CreateWorkspace(ctx context.Context, repoRoot string, verified bool) (*Work
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to create worktree: %s", strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("failed to create worktree (%s): %w", strings.TrimSpace(stderr.String()), err)
 	}
 
 	return &Workspace{
@@ -99,7 +99,7 @@ func verifyGitRepo(ctx context.Context, path string) error {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("not a git repository: %s", strings.TrimSpace(stderr.String()))
+		return fmt.Errorf("not a git repository (%s): %w", strings.TrimSpace(stderr.String()), err)
 	}
 
 	return nil

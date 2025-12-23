@@ -17,7 +17,7 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return "", fmt.Errorf("%s", strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("%s: %w", strings.TrimSpace(stderr.String()), err)
 	}
 	return strings.TrimSpace(stdout.String()), nil
 }
