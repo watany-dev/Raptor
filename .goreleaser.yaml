@@ -16,6 +16,8 @@ builds:
     binary: raptor
     env:
       - CGO_ENABLED=0
+    flags:
+      - -trimpath
     goos:
       - linux
       - darwin
