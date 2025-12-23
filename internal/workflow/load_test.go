@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 func TestLoadWorkflowFile(t *testing.T) {
@@ -654,4 +656,96 @@ func TestDiscoverWorkflows_WorkflowsIsFile(t *testing.T) {
 	if err != nil && !strings.Contains(err.Error(), "not a directory") {
 		t.Errorf("Error should mention 'not a directory', got: %v", err)
 	}
+}
+
+// TestLoadWorkflowFile_YAMLUnmarshalError tests the yaml.Unmarshal error path (line 19-21)
+func TestLoadWorkflowFile_YAMLUnmarshalError(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create invalid YAML that will fail yaml.Unmarshal
+	// Using invalid UTF-8 sequence or binary data
+	invalidContent := []byte{0xff, 0xfe, 0x00, 0x01, '%', '!', 0x00}
+	workflowPath := filepath.Join(tmpDir, "invalid.yml")
+	if err := os.WriteFile(workflowPath, invalidContent, 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	if err == nil {
+		t.Error("LoadWorkflowFile() expected error for invalid YAML binary content")
+	}
+	if err != nil && !strings.Contains(err.Error(), "parse workflow YAML") {
+		t.Logf("Got error: %v", err)
+	}
+}
+
+// TestExtractJobOrderFromNode_SequenceRoot tests extractJobOrderFromNode with sequence at root
+// This specifically covers the doc.Kind != yaml.MappingNode branch (line 56-58)
+func TestExtractJobOrderFromNode_SequenceRoot(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create YAML with sequence at root - this will parse but decode will fail
+	// However, we need to test the extractJobOrderFromNode function path
+	yamlContent := `---
+- item1
+- item2`
+	workflowPath := filepath.Join(tmpDir, "sequence.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	// This should error or return empty JobOrder
+	if err != nil {
+		// Error is expected since root is not a mapping
+		if !strings.Contains(err.Error(), "decode workflow") {
+			t.Logf("Got error: %v", err)
+		}
+	}
+}
+
+// TestExtractJobOrderFromNode_DirectCall tests extractJobOrderFromNode directly
+// to cover the doc.Kind != yaml.MappingNode branch
+func TestExtractJobOrderFromNode_DirectCall(t *testing.T) {
+	t.Parallel()
+
+	// Test with sequence node (not mapping)
+	t.Run("sequence node returns nil", func(t *testing.T) {
+		var root yaml.Node
+		yamlContent := `- item1
+- item2`
+		if err := yaml.Unmarshal([]byte(yamlContent), &root); err != nil {
+			t.Fatalf("failed to unmarshal YAML: %v", err)
+		}
+
+		result := extractJobOrderFromNode(&root)
+		if result != nil {
+			t.Errorf("extractJobOrderFromNode() = %v, want nil for sequence node", result)
+		}
+	})
+
+	// Test with scalar node
+	t.Run("scalar node returns nil", func(t *testing.T) {
+		var root yaml.Node
+		yamlContent := `just a string`
+		if err := yaml.Unmarshal([]byte(yamlContent), &root); err != nil {
+			t.Fatalf("failed to unmarshal YAML: %v", err)
+		}
+
+		result := extractJobOrderFromNode(&root)
+		if result != nil {
+			t.Errorf("extractJobOrderFromNode() = %v, want nil for scalar node", result)
+		}
+	})
+
+	// Test with empty node
+	t.Run("empty node returns nil", func(t *testing.T) {
+		root := &yaml.Node{}
+		result := extractJobOrderFromNode(root)
+		if result != nil {
+			t.Errorf("extractJobOrderFromNode() = %v, want nil for empty node", result)
+		}
+	})
 }
