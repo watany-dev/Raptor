@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+
+	"github.com/watany-dev/raptor/internal/security"
 )
 
 // HostExecutor executes commands on the host system using a shell.
@@ -21,9 +23,11 @@ func NewHostExecutor() *HostExecutor {
 
 // getCachedSysEnv returns the cached system environment variables.
 // The cache is populated on first call using sync.Once for thread safety.
+// Sensitive environment variables (credentials, tokens, etc.) are filtered out
+// to prevent credential leakage to workflow commands.
 func (h *HostExecutor) getCachedSysEnv() []string {
 	h.once.Do(func() {
-		h.cachedSysEnv = os.Environ()
+		h.cachedSysEnv = security.FilterSensitiveEnvVars(os.Environ())
 	})
 	return h.cachedSysEnv
 }
