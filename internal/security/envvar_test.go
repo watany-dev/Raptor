@@ -18,15 +18,54 @@ func TestValidateEnvVarName(t *testing.T) {
 		{"single letter", "X", false},
 		{"underscore only", "_", false},
 
-		// Blocked variables
+		// Blocked variables - Dynamic linker
 		{"blocked LD_PRELOAD", "LD_PRELOAD", true},
 		{"blocked ld_preload lowercase", "ld_preload", true},
+		{"blocked LD_LIBRARY_PATH", "LD_LIBRARY_PATH", true},
+		{"blocked LD_AUDIT", "LD_AUDIT", true},
+
+		// Blocked variables - Shell behavior
 		{"blocked BASH_ENV", "BASH_ENV", true},
 		{"blocked bash_env lowercase", "bash_env", true},
-		{"blocked LD_LIBRARY_PATH", "LD_LIBRARY_PATH", true},
 		{"blocked ENV", "ENV", true},
-		{"blocked GIT_DIR", "GIT_DIR", true},
+		{"blocked PROMPT_COMMAND", "PROMPT_COMMAND", true},
+		{"blocked PS4", "PS4", true},
+		{"blocked SHELLOPTS", "SHELLOPTS", true},
+		{"blocked BASHOPTS", "BASHOPTS", true},
+		{"blocked CDPATH", "CDPATH", true},
 		{"blocked IFS", "IFS", true},
+
+		// Blocked variables - Git operations
+		{"blocked GIT_DIR", "GIT_DIR", true},
+		{"blocked GIT_SSH_COMMAND", "GIT_SSH_COMMAND", true},
+		{"blocked GIT_ASKPASS", "GIT_ASKPASS", true},
+		{"blocked GIT_EXEC_PATH", "GIT_EXEC_PATH", true},
+		{"blocked GIT_TEMPLATE_DIR", "GIT_TEMPLATE_DIR", true},
+		{"blocked GIT_PAGER", "GIT_PAGER", true},
+		{"blocked GIT_EDITOR", "GIT_EDITOR", true},
+
+		// Blocked variables - Programming languages
+		{"blocked NODE_OPTIONS", "NODE_OPTIONS", true},
+		{"blocked NODE_PATH", "NODE_PATH", true},
+		{"blocked PYTHONPATH", "PYTHONPATH", true},
+		{"blocked PYTHONSTARTUP", "PYTHONSTARTUP", true},
+		{"blocked RUBYOPT", "RUBYOPT", true},
+		{"blocked PERL5LIB", "PERL5LIB", true},
+		{"blocked JAVA_TOOL_OPTIONS", "JAVA_TOOL_OPTIONS", true},
+		{"blocked CLASSPATH", "CLASSPATH", true},
+
+		// Blocked variables - Network proxies (MITM vectors)
+		{"blocked HTTP_PROXY", "HTTP_PROXY", true},
+		{"blocked HTTPS_PROXY", "HTTPS_PROXY", true},
+		{"blocked ALL_PROXY", "ALL_PROXY", true},
+		{"blocked SSL_CERT_DIR", "SSL_CERT_DIR", true},
+		{"blocked SSL_CERT_FILE", "SSL_CERT_FILE", true},
+
+		// Blocked variables - System paths
+		{"blocked HOME", "HOME", true},
+		{"blocked TMPDIR", "TMPDIR", true},
+		{"blocked TMP", "TMP", true},
+		{"blocked TEMP", "TEMP", true},
 
 		// Invalid format
 		{"invalid starts with number", "123VAR", true},

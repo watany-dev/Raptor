@@ -6,6 +6,62 @@ import (
 	"strings"
 )
 
+// DangerousPathPrefixes contains system paths that should never be added to PATH.
+// Adding these could allow malicious binaries to shadow system commands.
+var DangerousPathPrefixes = []string{
+	"/tmp",
+	"/var/tmp",
+	"/dev/shm",
+	"/run",
+	"/proc",
+	"/sys",
+}
+
+// ValidateGitHubPath validates a path entry for GITHUB_PATH.
+// It ensures the path is safe to add to the system PATH.
+// workspacePath is the isolated worktree path where execution occurs.
+func ValidateGitHubPath(pathEntry, workspacePath string) error {
+	if strings.TrimSpace(pathEntry) == "" {
+		return fmt.Errorf("GITHUB_PATH entry cannot be empty")
+	}
+
+	// Null byte check
+	if strings.Contains(pathEntry, "\x00") {
+		return fmt.Errorf("GITHUB_PATH entry contains null bytes")
+	}
+
+	// Normalize the path
+	cleanPath := filepath.Clean(pathEntry)
+
+	// Check for dangerous system paths
+	for _, dangerous := range DangerousPathPrefixes {
+		if strings.HasPrefix(cleanPath, dangerous+"/") || cleanPath == dangerous {
+			return fmt.Errorf(
+				"GITHUB_PATH entry %q is blocked for security: "+
+					"adding paths under %s could allow command shadowing attacks",
+				pathEntry, dangerous,
+			)
+		}
+	}
+
+	// If workspace is provided, validate path is within workspace
+	if workspacePath != "" {
+		// For absolute paths, check if they're within workspace
+		if filepath.IsAbs(cleanPath) {
+			relPath, err := filepath.Rel(workspacePath, cleanPath)
+			if err != nil || strings.HasPrefix(relPath, "..") {
+				return fmt.Errorf(
+					"GITHUB_PATH entry %q is outside the workspace: "+
+						"for security, paths must be within the workspace directory",
+					pathEntry,
+				)
+			}
+		}
+	}
+
+	return nil
+}
+
 // ValidateWorkingDirectory validates that a working directory is safe.
 // It ensures:
 // - No absolute paths

@@ -344,6 +344,19 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 			return nil, fmt.Errorf("failed to parse GITHUB_PATH: %w", err)
 		}
 		if len(newPaths) > 0 {
+			// Validate each path entry for security
+			for _, pathEntry := range newPaths {
+				if err := security.ValidateGitHubPath(pathEntry, runCtx.workDir); err != nil {
+					fmt.Fprintln(r.stderr, "")
+					fmt.Fprintln(r.stderr, "❌ Security Error:")
+					fmt.Fprintln(r.stderr, err.Error())
+					fmt.Fprintln(r.stderr, "")
+					fmt.Fprintln(r.stderr, "GITHUB_PATH entries must be within the workspace to prevent command shadowing attacks.")
+					fmt.Fprintln(r.stderr, "See: https://github.com/watany-dev/raptor/blob/main/SECURITY.md")
+					fmt.Fprintln(r.stderr, "")
+					return nil, fmt.Errorf("security validation failed: %w", err)
+				}
+			}
 			currentPath := accumulatedEnv["PATH"]
 			if currentPath == "" {
 				currentPath = os.Getenv("PATH")
