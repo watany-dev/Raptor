@@ -181,7 +181,7 @@ func TestConditionEvaluator_Evaluate(t *testing.T) {
 func TestNewConditionEvaluator(t *testing.T) {
 	evaluator := NewConditionEvaluator()
 	if evaluator == nil {
-		t.Error("NewConditionEvaluator() returned nil")
+		t.Fatal("NewConditionEvaluator() returned nil")
 	}
 	if evaluator.envCompareRegex == nil {
 		t.Error("envCompareRegex is nil")

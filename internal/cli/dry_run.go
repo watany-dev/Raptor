@@ -22,15 +22,15 @@ func NewDryRunFormatter(stdout io.Writer) *DryRunFormatter {
 
 // Format displays the dry-run preview for the given workflow and jobs.
 func (drf *DryRunFormatter) Format(wf *workflow.WorkflowFile, jobIDs []string, workflowPath string) ([]*RunResult, error) {
-	fmt.Fprintln(drf.stdout, "")
-	fmt.Fprintln(drf.stdout, "🔍 DRY RUN MODE")
-	fmt.Fprintln(drf.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintf(drf.stdout, "Workflow: %s\n", workflowPath)
+	_, _ = fmt.Fprintln(drf.stdout, "")
+	_, _ = fmt.Fprintln(drf.stdout, "🔍 DRY RUN MODE")
+	_, _ = fmt.Fprintln(drf.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintf(drf.stdout, "Workflow: %s\n", workflowPath)
 	if wf.Name != "" {
-		fmt.Fprintf(drf.stdout, "Name: %s\n", wf.Name)
+		_, _ = fmt.Fprintf(drf.stdout, "Name: %s\n", wf.Name)
 	}
-	fmt.Fprintln(drf.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(drf.stdout, "")
+	_, _ = fmt.Fprintln(drf.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(drf.stdout, "")
 
 	var results []*RunResult
 
@@ -47,23 +47,23 @@ func (drf *DryRunFormatter) Format(wf *workflow.WorkflowFile, jobIDs []string, w
 		results = append(results, result)
 	}
 
-	fmt.Fprintln(drf.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(drf.stdout, "To execute this workflow, use: raptor run -w", workflowPath)
-	fmt.Fprintln(drf.stdout, "")
+	_, _ = fmt.Fprintln(drf.stdout, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(drf.stdout, "To execute this workflow, use: raptor run -w", workflowPath)
+	_, _ = fmt.Fprintln(drf.stdout, "")
 
 	return results, nil
 }
 
 // formatJob formats a single job's dry-run preview.
 func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) (*RunResult, error) {
-	fmt.Fprintf(drf.stdout, "📋 Job: %s\n", jobID)
+	_, _ = fmt.Fprintf(drf.stdout, "📋 Job: %s\n", jobID)
 	if job.Name != "" && job.Name != jobID {
-		fmt.Fprintf(drf.stdout, "   Name: %s\n", job.Name)
+		_, _ = fmt.Fprintf(drf.stdout, "   Name: %s\n", job.Name)
 	}
 	if job.RunsOn != "" {
-		fmt.Fprintf(drf.stdout, "   Runs-on: %s\n", job.RunsOn)
+		_, _ = fmt.Fprintf(drf.stdout, "   Runs-on: %s\n", job.RunsOn)
 	}
-	fmt.Fprintln(drf.stdout, "")
+	_, _ = fmt.Fprintln(drf.stdout, "")
 
 	result := &RunResult{
 		JobID:       jobID,
@@ -91,23 +91,23 @@ func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) (*RunResu
 
 // formatStep formats a single step's dry-run preview.
 func (drf *DryRunFormatter) formatStep(index int, stepName string, step *workflow.Step) {
-	fmt.Fprintf(drf.stdout, "   [%d] %s\n", index+1, stepName)
+	_, _ = fmt.Fprintf(drf.stdout, "   [%d] %s\n", index+1, stepName)
 	if step.WorkingDirectory != "" {
-		fmt.Fprintf(drf.stdout, "       Working directory: %s\n", step.WorkingDirectory)
+		_, _ = fmt.Fprintf(drf.stdout, "       Working directory: %s\n", step.WorkingDirectory)
 	}
 	if step.If != "" {
-		fmt.Fprintf(drf.stdout, "       Condition: %s\n", step.If)
+		_, _ = fmt.Fprintf(drf.stdout, "       Condition: %s\n", step.If)
 	}
 	if len(step.Env) > 0 {
-		fmt.Fprintf(drf.stdout, "       Environment: %d variable(s)\n", len(step.Env))
+		_, _ = fmt.Fprintf(drf.stdout, "       Environment: %d variable(s)\n", len(step.Env))
 	}
 	if step.Run != "" {
 		// Show the command, indented
 		lines := strings.Split(strings.TrimSpace(step.Run), "\n")
-		fmt.Fprintln(drf.stdout, "       Command:")
+		_, _ = fmt.Fprintln(drf.stdout, "       Command:")
 		for _, line := range lines {
-			fmt.Fprintf(drf.stdout, "         %s\n", line)
+			_, _ = fmt.Fprintf(drf.stdout, "         %s\n", line)
 		}
 	}
-	fmt.Fprintln(drf.stdout, "")
+	_, _ = fmt.Fprintln(drf.stdout, "")
 }

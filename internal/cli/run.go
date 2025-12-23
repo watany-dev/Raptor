@@ -149,7 +149,7 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 		return nil, noopCleanup, fmt.Errorf("failed to create workspace: %w", err)
 	}
 
-	fmt.Fprintf(r.stdout, "Created isolated workspace: %s\n", ws.Path)
+	_, _ = fmt.Fprintf(r.stdout, "Created isolated workspace: %s\n", ws.Path)
 
 	// Get git info from original repo
 	sha, _ := util.GitHeadSHA(ctx, repoRoot)
@@ -157,9 +157,9 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 
 	cleanup := func() {
 		if err := worktree.RemoveWorkspace(ctx, ws); err != nil {
-			fmt.Fprintf(r.stderr, "Warning: failed to remove workspace: %v\n", err)
+			_, _ = fmt.Fprintf(r.stderr, "Warning: failed to remove workspace: %v\n", err)
 		} else {
-			fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
+			_, _ = fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
 		}
 	}
 
@@ -180,7 +180,7 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 		return nil, fmt.Errorf("failed to select job: %w", err)
 	}
 
-	fmt.Fprintf(r.stdout, "=== Running job: %s ===\n", jobID)
+	_, _ = fmt.Fprintf(r.stdout, "=== Running job: %s ===\n", jobID)
 
 	result := &RunResult{
 		JobID:       jobID,
@@ -241,14 +241,14 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 
 // printSecurityWarning prints a security warning before execution.
 func (r *Runner) printSecurityWarning(opts *RunOptions) {
-	fmt.Fprintln(r.stderr, "")
-	fmt.Fprintln(r.stderr, "⚠️  SECURITY WARNING")
-	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(r.stderr, "This tool executes commands from workflow files with your user privileges.")
-	fmt.Fprintln(r.stderr, "Only run workflows from trusted sources.")
-	fmt.Fprintln(r.stderr, "")
-	fmt.Fprintf(r.stderr, "Workflow: %s\n", opts.Workflow)
-	fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
-	fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	fmt.Fprintln(r.stderr, "")
+	_, _ = fmt.Fprintln(r.stderr, "")
+	_, _ = fmt.Fprintln(r.stderr, "⚠️  SECURITY WARNING")
+	_, _ = fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(r.stderr, "This tool executes commands from workflow files with your user privileges.")
+	_, _ = fmt.Fprintln(r.stderr, "Only run workflows from trusted sources.")
+	_, _ = fmt.Fprintln(r.stderr, "")
+	_, _ = fmt.Fprintf(r.stderr, "Workflow: %s\n", opts.Workflow)
+	_, _ = fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
+	_, _ = fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+	_, _ = fmt.Fprintln(r.stderr, "")
 }

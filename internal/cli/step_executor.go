@@ -68,7 +68,7 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 		stepName = fmt.Sprintf("Step %d", index+1)
 	}
 
-	fmt.Fprintf(se.stdout, "::group::%s\n", stepName)
+	_, _ = fmt.Fprintf(se.stdout, "::group::%s\n", stepName)
 
 	// Merge step-level env
 	stepEnv := runtime.MergeEnv(ctx.AccumulatedEnv, step.Env)
@@ -76,7 +76,7 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 	// Evaluate if condition
 	shouldRun, err := se.evaluator.Evaluate(step.If, stepEnv, ctx.StepsContext, ctx.JobSuccess)
 	if err != nil {
-		fmt.Fprintf(se.stderr, "Warning: failed to evaluate if condition: %v\n", err)
+		_, _ = fmt.Fprintf(se.stderr, "Warning: failed to evaluate if condition: %v\n", err)
 		// On evaluation error, default to running the step
 		shouldRun = true
 	}
@@ -90,8 +90,8 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 
 // handleSkippedStep handles a step that should be skipped due to condition evaluation.
 func (se *StepExecutor) handleSkippedStep(step *workflow.Step, index int, stepName string, ctx *ExecutionContext) (*StepResult, error) {
-	fmt.Fprintf(se.stdout, "Skipping step (condition evaluated to false)\n")
-	fmt.Fprintf(se.stdout, "::endgroup::\n")
+	_, _ = fmt.Fprintf(se.stdout, "Skipping step (condition evaluated to false)\n")
+	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 
 	stepResult := &StepResult{
 		StepIndex: index,
@@ -167,7 +167,7 @@ func (se *StepExecutor) executeStep(step *workflow.Step, index int, stepName str
 		}
 	}
 
-	fmt.Fprintf(se.stdout, "::endgroup::\n")
+	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 
 	// Update accumulated environment from GITHUB_ENV
 	if err := se.updateEnvironmentFromFiles(ctx); err != nil {
@@ -180,15 +180,15 @@ func (se *StepExecutor) executeStep(step *workflow.Step, index int, stepName str
 // printOutput prints the step's stdout and stderr.
 func (se *StepExecutor) printOutput(execResult executor.Result) {
 	if execResult.Stdout != "" {
-		fmt.Fprint(se.stdout, execResult.Stdout)
+		_, _ = fmt.Fprint(se.stdout, execResult.Stdout)
 		if !strings.HasSuffix(execResult.Stdout, "\n") {
-			fmt.Fprintln(se.stdout)
+			_, _ = fmt.Fprintln(se.stdout)
 		}
 	}
 	if execResult.Stderr != "" {
-		fmt.Fprint(se.stderr, execResult.Stderr)
+		_, _ = fmt.Fprint(se.stderr, execResult.Stderr)
 		if !strings.HasSuffix(execResult.Stderr, "\n") {
-			fmt.Fprintln(se.stderr)
+			_, _ = fmt.Fprintln(se.stderr)
 		}
 	}
 }
@@ -199,13 +199,13 @@ func (se *StepExecutor) updateEnvironmentFromFiles(ctx *ExecutionContext) error 
 	newEnv, err := envfiles.ParseEnvFile(se.envFilePath)
 	if err != nil {
 		// Print detailed security error message
-		fmt.Fprintln(se.stderr, "")
-		fmt.Fprintln(se.stderr, "❌ Security Error:")
-		fmt.Fprintln(se.stderr, err.Error())
-		fmt.Fprintln(se.stderr, "")
-		fmt.Fprintln(se.stderr, "This restriction protects your system from potentially malicious workflows.")
-		fmt.Fprintln(se.stderr, "See: https://github.com/watany-dev/raptor/blob/main/SECURITY.md")
-		fmt.Fprintln(se.stderr, "")
+		_, _ = fmt.Fprintln(se.stderr, "")
+		_, _ = fmt.Fprintln(se.stderr, "❌ Security Error:")
+		_, _ = fmt.Fprintln(se.stderr, err.Error())
+		_, _ = fmt.Fprintln(se.stderr, "")
+		_, _ = fmt.Fprintln(se.stderr, "This restriction protects your system from potentially malicious workflows.")
+		_, _ = fmt.Fprintln(se.stderr, "See: https://github.com/watany-dev/raptor/blob/main/SECURITY.md")
+		_, _ = fmt.Fprintln(se.stderr, "")
 
 		return fmt.Errorf("security validation failed: %w", err)
 	}
