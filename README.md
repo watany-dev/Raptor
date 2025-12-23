@@ -1,24 +1,24 @@
 # Raptor
 
-GitHub Actions ワークフローをローカルで実行する軽量CLIツール
+A lightweight CLI tool for running GitHub Actions workflows locally
 
-## 概要
+## Overview
 
-Raptorは、GitHub Actionsのワークフローファイル (`.github/workflows/*.yml`) をローカル環境で実行するためのCLIツールです。CIパイプラインをプッシュ前にローカルでテストできます。
+Raptor is a CLI tool for running GitHub Actions workflow files (`.github/workflows/*.yml`) in your local environment. Test your CI pipelines locally before pushing.
 
-## 特徴
+## Features
 
-- GitHub Actions ワークフローYAMLのネイティブサポート
-- ワークフロー/ジョブ/ステップレベルの環境変数サポート
-- `GITHUB_ENV` / `GITHUB_PATH` による動的環境変数の伝搬
-- ステップごとの作業ディレクトリ設定
-- 軽量でシンプルな設計
+- Native support for GitHub Actions workflow YAML
+- Environment variables support at workflow/job/step levels
+- Dynamic environment variable propagation via `GITHUB_ENV` / `GITHUB_PATH`
+- Per-step working directory configuration
+- Lightweight and simple design
 
-## インストール
+## Installation
 
-### バイナリをダウンロード（推奨）
+### Download Binary (Recommended)
 
-[リリースページ](https://github.com/watany-dev/raptor/releases)から、お使いのプラットフォームに合ったバイナリをダウンロードしてください。
+Download the binary for your platform from the [releases page](https://github.com/watany-dev/raptor/releases).
 
 #### Linux (x86_64)
 
@@ -58,9 +58,9 @@ raptor --version
 
 #### Windows (x86_64)
 
-1. [raptor_0.1.2_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Windows_x86_64.zip) をダウンロード
-2. ZIPファイルを解凍
-3. `raptor.exe` をPATHの通ったディレクトリに配置
+1. Download [raptor_0.1.2_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Windows_x86_64.zip)
+2. Extract the ZIP file
+3. Place `raptor.exe` in a directory in your PATH
 
 ### Go install
 
@@ -68,7 +68,7 @@ raptor --version
 go install github.com/watany-dev/raptor/cmd/raptor@v0.1.2
 ```
 
-### ソースからビルド
+### Build from Source
 
 ```bash
 git clone https://github.com/watany-dev/raptor.git
@@ -77,48 +77,48 @@ go build -o raptor ./cmd/raptor
 sudo mv raptor /usr/local/bin/
 ```
 
-### 必要要件
+### Requirements
 
-- ランタイム: Git 2.5 以上
-- ソースビルド時のみ: Go 1.24 以上
+- Runtime: Git 2.5 or later
+- Build from source only: Go 1.24 or later
 
-## 使い方
+## Usage
 
-### 基本的な使用方法
+### Basic Usage
 
 ```bash
-# 特定のジョブを実行
-raptor run --workflow <ワークフローファイル> --job <ジョブID>
+# Run a specific job
+raptor run --workflow <workflow-file> --job <job-id>
 
-# 全ジョブを実行 (--job省略時)
-raptor run --workflow <ワークフローファイル>
+# Run all jobs (omit --job)
+raptor run --workflow <workflow-file>
 ```
 
-### コマンドオプション
+### Command Options
 
-| オプション | 短縮形 | 説明 |
-|------------|--------|------|
-| `--workflow` | `-w` | ワークフローファイルへのパス (必須) |
-| `--job` | `-j` | 実行するジョブID (省略時は全ジョブ実行) |
-| `--workdir` | `-C` | 作業ディレクトリ (デフォルト: カレントディレクトリ) |
-| `--dry-run` | `-n` | 実際に実行せずプレビュー表示 |
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--workflow` | `-w` | Path to workflow file (required) |
+| `--job` | `-j` | Job ID to run (runs all jobs if omitted) |
+| `--workdir` | `-C` | Working directory (default: current directory) |
+| `--dry-run` | `-n` | Preview without actually executing |
 
-**注意**: すべてのワークフローはセキュリティのため隔離されたGit worktreeで実行されます。
+**Note**: All workflows are executed in isolated Git worktrees for security.
 
-### Dry-run モード
+### Dry-run Mode
 
-Dry-runモードを使うと、ワークフローを実際に実行せずに、何が実行されるかをプレビューできます。CIパイプラインの確認やデバッグに便利です。
+Dry-run mode allows you to preview what will be executed without actually running the workflow. Useful for checking and debugging CI pipelines.
 
 ```bash
-# 明示的に dry-run フラグを指定
+# Explicitly specify dry-run flag
 raptor run -w ci.yml --dry-run
 raptor run -w ci.yml -n
 
-# run サブコマンドを省略すると自動的に dry-run モード
+# Omit run subcommand for automatic dry-run mode
 raptor -w ci.yml
 ```
 
-Dry-runモードの出力例:
+Example dry-run output:
 
 ```
 🔍 DRY RUN MODE
@@ -142,35 +142,35 @@ Name: CI
 To execute this workflow, use: raptor run -w .github/workflows/ci.yml
 ```
 
-表示される情報:
-- ワークフロー名とパス
-- ジョブID、名前、runs-on
-- 各ステップの名前、作業ディレクトリ、条件 (`if`)、環境変数の数、コマンド内容
+Information displayed:
+- Workflow name and path
+- Job ID, name, and runs-on
+- Each step's name, working directory, conditions (`if`), number of environment variables, and command content
 
-### 使用例
+### Examples
 
 ```bash
-# CIワークフローのbuildジョブを実行
+# Run the build job from CI workflow
 raptor run --workflow .github/workflows/ci.yml --job build
 
-# 短縮形で指定
+# Use short form
 raptor run -w ci.yml -j test
 
-# ワークフロー内の全ジョブを実行
+# Run all jobs in workflow
 raptor run -w ci.yml
 
-# 作業ディレクトリを指定して実行
+# Run with specified working directory
 raptor run -w .github/workflows/ci.yml -j lint -C /path/to/project
 ```
 
-### ヘルプ
+### Help
 
 ```bash
 raptor help
 raptor --help
 ```
 
-### バージョン確認
+### Check Version
 
 ```bash
 raptor version
@@ -178,28 +178,28 @@ raptor --version
 raptor -v
 ```
 
-## サポートされる機能
+## Supported Features
 
-### ワークフロー構文
+### Workflow Syntax
 
-現在サポートされているGitHub Actions構文:
+Currently supported GitHub Actions syntax:
 
-| 機能 | サポート |
-|------|----------|
-| `name` (ワークフロー/ジョブ/ステップ名) | ✅ |
-| `env` (環境変数) | ✅ |
-| `run` (シェルコマンド) | ✅ |
+| Feature | Support |
+|---------|---------|
+| `name` (workflow/job/step names) | ✅ |
+| `env` (environment variables) | ✅ |
+| `run` (shell commands) | ✅ |
 | `working-directory` | ✅ |
 | `GITHUB_ENV` | ✅ |
 | `GITHUB_PATH` | ✅ |
-| `if` (条件分岐) | ✅ (基本構文) |
-| `uses` (アクション) | ❌ |
-| `with` (アクション入力) | ❌ |
-| `matrix` (マトリックスビルド) | ❌ |
+| `if` (conditionals) | ✅ (basic syntax) |
+| `uses` (actions) | ❌ |
+| `with` (action inputs) | ❌ |
+| `matrix` (matrix builds) | ❌ |
 
-### 条件分岐 (`if`)
+### Conditionals (`if`)
 
-ステップの条件実行がサポートされています：
+Conditional step execution is supported:
 
 ```yaml
 steps:
@@ -220,22 +220,22 @@ steps:
     run: echo "Cleanup step"
 ```
 
-**サポートされる条件構文:**
+**Supported conditional syntax:**
 
-| 構文 | 説明 |
-|------|------|
-| `true` / `false` | リテラル真偽値 |
-| `success()` | 前のステップがすべて成功 |
-| `failure()` | いずれかのステップが失敗 |
-| `always()` | 常に実行（失敗後も継続） |
-| `cancelled()` | キャンセル時に実行（常にfalse） |
-| `${{ env.VAR == 'value' }}` | 環境変数の比較 |
-| `${{ env.VAR != 'value' }}` | 環境変数の否定比較 |
-| `${{ steps.ID.outcome == 'success' }}` | ステップ結果の参照 |
+| Syntax | Description |
+|--------|-------------|
+| `true` / `false` | Literal boolean values |
+| `success()` | All previous steps succeeded |
+| `failure()` | Any step failed |
+| `always()` | Always execute (continue after failure) |
+| `cancelled()` | Execute on cancellation (always false) |
+| `${{ env.VAR == 'value' }}` | Environment variable comparison |
+| `${{ env.VAR != 'value' }}` | Environment variable negation |
+| `${{ steps.ID.outcome == 'success' }}` | Step result reference |
 
-### サンプルワークフロー
+### Sample Workflow
 
-Raptorで実行可能なワークフロー例:
+Example workflow that can be run with Raptor:
 
 ```yaml
 name: CI
@@ -267,67 +267,67 @@ jobs:
         run: echo "MY_VAR is $MY_VAR"
 ```
 
-## セキュリティ
+## Security
 
-Raptorはワークフローファイルに記述されたコマンドを実行するため、**信頼できるワークフローのみを実行してください**。
+Since Raptor executes commands described in workflow files, **only run trusted workflows**.
 
-### セキュリティ機能
+### Security Features
 
-- **隔離実行**: すべてのワークフローはGit worktreeで隔離実行されます
-- **絶対パス禁止**: `working-directory`で絶対パスは使用できません
-- **環境変数保護**: `LD_PRELOAD`等の危険な環境変数はブロックされます
-- **入力検証**: 環境変数名と値を検証します
+- **Isolated execution**: All workflows run in isolated Git worktrees
+- **Absolute path prohibition**: Absolute paths cannot be used in `working-directory`
+- **Environment variable protection**: Dangerous environment variables like `LD_PRELOAD` are blocked
+- **Input validation**: Environment variable names and values are validated
 
-詳細は [SECURITY.md](SECURITY.md) を参照してください。
+See [SECURITY.md](SECURITY.md) for details.
 
-### 注意事項
+### Warnings
 
-Raptorはワークフローを**あなたのユーザー権限で実行**します。悪意のあるワークフローは以下を実行可能です：
+Raptor runs workflows **with your user permissions**. Malicious workflows can:
 
-- ファイルの削除・変更
-- ネットワークアクセス
-- 外部へのデータ送信
+- Delete or modify files
+- Access network
+- Send data externally
 
-**必ず内容を確認してから実行してください。**
+**Always verify the content before running.**
 
-## 開発
+## Development
 
-### ビルド
+### Build
 
 ```bash
 go build ./...
 ```
 
-### テスト実行
+### Run Tests
 
 ```bash
 go test ./...
 ```
 
-### テストカバレッジ
+### Test Coverage
 
 ```bash
 go test -cover ./...
 ```
 
-## プロジェクト構造
+## Project Structure
 
 ```
 raptor/
-├── cmd/raptor/        # CLIエントリポイント
+├── cmd/raptor/        # CLI entry point
 ├── internal/
-│   ├── cli/           # CLIフラグ解析・ランナー
-│   ├── envfiles/      # GITHUB_ENV/GITHUB_PATH解析
-│   ├── executor/      # コマンド実行エンジン
-│   ├── expression/    # 条件式評価 (if条件)
-│   ├── runtime/       # 環境変数マージ処理
-│   ├── security/      # セキュリティ検証
-│   ├── util/          # Git操作ユーティリティ
-│   ├── workflow/      # ワークフローYAML解析
-│   └── worktree/      # Git worktree管理
-└── docs/              # 開発ドキュメント
+│   ├── cli/           # CLI flag parsing and runner
+│   ├── envfiles/      # GITHUB_ENV/GITHUB_PATH parsing
+│   ├── executor/      # Command execution engine
+│   ├── expression/    # Expression evaluation (if conditions)
+│   ├── runtime/       # Environment variable merging
+│   ├── security/      # Security validation
+│   ├── util/          # Git operation utilities
+│   ├── workflow/      # Workflow YAML parsing
+│   └── worktree/      # Git worktree management
+└── docs/              # Development documentation
 ```
 
-## ライセンス
+## License
 
 Apache License 2.0
