@@ -1,7 +1,6 @@
 package util
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -13,7 +12,7 @@ func runGit(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 
-	var stdout, stderr bytes.Buffer
+	var stdout, stderr strings.Builder
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 

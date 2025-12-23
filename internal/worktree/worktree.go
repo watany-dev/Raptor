@@ -1,7 +1,6 @@
 package worktree
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -49,7 +48,7 @@ func CreateWorkspace(ctx context.Context, repoRoot string, verified bool) (*Work
 	cmd := exec.CommandContext(ctx, "git", "worktree", "add", "--detach", wsPath)
 	cmd.Dir = repoRoot
 
-	var stderr bytes.Buffer
+	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
@@ -73,7 +72,7 @@ func RemoveWorkspace(ctx context.Context, ws *Workspace) error {
 	cmd := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", ws.Path)
 	cmd.Dir = ws.RepoRoot
 
-	var stderr bytes.Buffer
+	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
@@ -96,7 +95,7 @@ func verifyGitRepo(ctx context.Context, path string) error {
 	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
 	cmd.Dir = path
 
-	var stderr bytes.Buffer
+	var stderr strings.Builder
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
