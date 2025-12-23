@@ -642,6 +642,26 @@ EOF`
 	}
 }
 
+// TestParseEnvFile_HeredocValueWithNullByte tests heredoc value validation with null byte
+// This specifically covers the ValidateEnvVarValue error path (line 64-66)
+func TestParseEnvFile_HeredocValueWithNullByte(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Create a file with heredoc containing null byte in value
+	// The key is valid, but the value contains a null byte which should fail validation
+	content := "VALID_VAR<<EOF\nvalue with \x00 null byte\nEOF"
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	_, err := ParseEnvFile(envFile)
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for heredoc value containing null byte")
+	}
+}
+
 // TestParsePathFile_ScannerError tests the scanner.Err() path by creating a file
 // with a line that exceeds the default scanner buffer size
 func TestParsePathFile_ScannerError(t *testing.T) {

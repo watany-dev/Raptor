@@ -760,3 +760,74 @@ func TestStepExecutor_updateEnvironmentFromFiles_PathFileError(t *testing.T) {
 		t.Error("updateEnvironmentFromFiles() expected error for unreadable path file")
 	}
 }
+
+// TestStepExecutor_executeStep_EnvFileSecurityError tests the executeStep error path
+// when updateEnvironmentFromFiles returns an error due to security validation failure
+func TestStepExecutor_executeStep_EnvFileSecurityError(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+	pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+	// Write a file with blocked env var (security error) AFTER step execution
+	// We need to simulate the step writing to GITHUB_ENV with a blocked var
+
+	mock := newMockExecutor(executor.Result{ExitCode: 0, Stdout: "success\n"})
+	evaluator := expression.NewConditionEvaluator()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+	// Pre-create the env file with blocked variable to simulate step writing it
+	if err := os.WriteFile(envFilePath, []byte("LD_PRELOAD=/malicious/lib.so\n"), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	ctx := NewExecutionContext(map[string]string{})
+
+	step := &workflow.Step{
+		Name: "Test Step",
+		Run:  "echo test",
+	}
+
+	_, err := se.executeStep(step, 0, "Test Step", map[string]string{}, ctx)
+	if err == nil {
+		t.Error("executeStep() expected error when env file contains blocked var")
+	}
+}
+
+// TestStepExecutor_updateEnvironmentFromFiles_PathFileScannerError tests ParsePathFile scanner error
+// This works without root by using a line that exceeds scanner buffer
+func TestStepExecutor_updateEnvironmentFromFiles_PathFileScannerError(t *testing.T) {
+	tmpDir := t.TempDir()
+	envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+	pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+	// Create path file with a very long line (> 64KB to exceed default scanner buffer)
+	longLine := make([]byte, 70000)
+	for i := range longLine {
+		longLine[i] = 'a'
+	}
+	content := append([]byte("/usr/bin\n"), longLine...)
+	content = append(content, []byte("\n/bin")...)
+
+	if err := os.WriteFile(pathFilePath, content, 0644); err != nil {
+		t.Fatalf("Failed to write path file: %v", err)
+	}
+
+	mock := newMockExecutor()
+	evaluator := expression.NewConditionEvaluator()
+
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+	ctx := NewExecutionContext(map[string]string{})
+
+	err := se.updateEnvironmentFromFiles(ctx)
+	if err == nil {
+		t.Error("updateEnvironmentFromFiles() expected error for scanner buffer overflow")
+	}
+}

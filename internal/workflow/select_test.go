@@ -226,6 +226,64 @@ func TestDiscoverWorkflowsEdgeCases(t *testing.T) {
 		}
 	})
 
+	t.Run("returns error when stat fails with permission error", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("skipping permission test as root")
+		}
+
+		tmpDir := t.TempDir()
+		ghDir := filepath.Join(tmpDir, ".github")
+		if err := os.MkdirAll(ghDir, 0755); err != nil {
+			t.Fatalf("failed to create .github directory: %v", err)
+		}
+
+		// Create workflows directory but make parent unreadable
+		workflowsDir := filepath.Join(ghDir, "workflows")
+		if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+			t.Fatalf("failed to create workflows directory: %v", err)
+		}
+
+		// Make .github directory unreadable to trigger stat error
+		if err := os.Chmod(ghDir, 0000); err != nil {
+			t.Fatalf("failed to chmod: %v", err)
+		}
+		defer func() { _ = os.Chmod(ghDir, 0755) }()
+
+		_, err := DiscoverWorkflows(tmpDir)
+		if err == nil {
+			t.Error("DiscoverWorkflows() expected error for permission denied on stat")
+		}
+	})
+
+	t.Run("returns error when readdir fails", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("skipping permission test as root")
+		}
+
+		tmpDir := t.TempDir()
+		workflowsDir := filepath.Join(tmpDir, ".github", "workflows")
+		if err := os.MkdirAll(workflowsDir, 0755); err != nil {
+			t.Fatalf("failed to create workflows directory: %v", err)
+		}
+
+		// Create a workflow file
+		workflowPath := filepath.Join(workflowsDir, "test.yml")
+		if err := os.WriteFile(workflowPath, []byte("name: Test"), 0644); err != nil {
+			t.Fatalf("failed to write workflow file: %v", err)
+		}
+
+		// Make directory unreadable but still stat-able
+		if err := os.Chmod(workflowsDir, 0111); err != nil {
+			t.Fatalf("failed to chmod: %v", err)
+		}
+		defer func() { _ = os.Chmod(workflowsDir, 0755) }()
+
+		_, err := DiscoverWorkflows(tmpDir)
+		if err == nil {
+			t.Error("DiscoverWorkflows() expected error for permission denied on readdir")
+		}
+	})
+
 	t.Run("discovers workflows with mixed case extensions", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		workflowsDir := filepath.Join(tmpDir, ".github", "workflows")

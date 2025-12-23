@@ -193,10 +193,7 @@ func TestDryRunFormatter_formatJob(t *testing.T) {
 			},
 		}
 
-		result, err := formatter.formatJob("build", job)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		result := formatter.formatJob("build", job)
 
 		output := buf.String()
 		if !strings.Contains(output, "Job: build") {
@@ -228,10 +225,7 @@ func TestDryRunFormatter_formatJob(t *testing.T) {
 			},
 		}
 
-		_, err := formatter.formatJob("build", job)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		_ = formatter.formatJob("build", job)
 
 		output := buf.String()
 		// Should not contain "Name:" when name equals ID
@@ -250,10 +244,7 @@ func TestDryRunFormatter_formatJob(t *testing.T) {
 			},
 		}
 
-		_, err := formatter.formatJob("test", job)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		_ = formatter.formatJob("test", job)
 
 		output := buf.String()
 		if strings.Contains(output, "Runs-on:") {
@@ -272,10 +263,7 @@ func TestDryRunFormatter_formatJob(t *testing.T) {
 			},
 		}
 
-		result, err := formatter.formatJob("test", job)
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
+		result := formatter.formatJob("test", job)
 
 		output := buf.String()
 		if !strings.Contains(output, "Step 1") {
