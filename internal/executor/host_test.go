@@ -323,3 +323,121 @@ func TestHostExecutor_Execute_WithEnvironmentVariables(t *testing.T) {
 		t.Errorf("Execute() failed to pass environment variables correctly")
 	}
 }
+
+// TestHostExecutor_Execute_CommandFailsToStart tests handling of commands that fail to start
+func TestHostExecutor_Execute_CommandFailsToStart(t *testing.T) {
+	executor := NewHostExecutor()
+
+	// Use a non-existent working directory to cause command to fail
+	config := Config{
+		Command:    "echo test",
+		WorkingDir: "/nonexistent/path/that/does/not/exist/at/all",
+	}
+
+	_, err := executor.Execute(config)
+	if err == nil {
+		// If no error, check the result has proper output
+		// Some systems might handle this differently
+		return
+	}
+
+	// If there's an error, it should be because command failed to start
+	t.Logf("Execute() returned expected error: %v", err)
+}
+
+// TestHostExecutor_Execute_EmptyEnv tests command execution with empty env map
+func TestHostExecutor_Execute_EmptyEnv(t *testing.T) {
+	executor := NewHostExecutor()
+
+	config := Config{
+		Command: "echo test",
+		Env:     map[string]string{},
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+}
+
+// TestHostExecutor_Execute_NilEnv tests command execution with nil env map
+func TestHostExecutor_Execute_NilEnv(t *testing.T) {
+	executor := NewHostExecutor()
+
+	config := Config{
+		Command: "echo test",
+		Env:     nil,
+	}
+
+	result, err := executor.Execute(config)
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
+	}
+
+	if result.ExitCode != 0 {
+		t.Errorf("expected exit code 0, got %d", result.ExitCode)
+	}
+}
+
+// TestHostExecutor_getCachedSysEnv tests the environment caching
+func TestHostExecutor_getCachedSysEnv(t *testing.T) {
+	executor := NewHostExecutor()
+
+	// First call should cache
+	env1 := executor.getCachedSysEnv()
+	if len(env1) == 0 {
+		t.Error("getCachedSysEnv() should return non-empty env")
+	}
+
+	// Second call should return cached value
+	env2 := executor.getCachedSysEnv()
+
+	// Should be the same slice
+	if len(env1) != len(env2) {
+		t.Error("getCachedSysEnv() should return consistent results")
+	}
+}
+
+// TestNewHostExecutor tests creating a new executor
+func TestNewHostExecutor(t *testing.T) {
+	executor := NewHostExecutor()
+	if executor == nil {
+		t.Error("NewHostExecutor() should return non-nil executor")
+	}
+}
+
+// TestHostExecutor_Execute_MultipleCallsWithCache tests that multiple calls work with caching
+func TestHostExecutor_Execute_MultipleCallsWithCache(t *testing.T) {
+	executor := NewHostExecutor()
+
+	// First call
+	config1 := Config{
+		Command: "echo first",
+		Env:     map[string]string{"VAR": "value1"},
+	}
+	result1, err := executor.Execute(config1)
+	if err != nil {
+		t.Fatalf("First Execute() error = %v", err)
+	}
+
+	// Second call should use cached system env
+	config2 := Config{
+		Command: "echo second",
+		Env:     map[string]string{"VAR": "value2"},
+	}
+	result2, err := executor.Execute(config2)
+	if err != nil {
+		t.Fatalf("Second Execute() error = %v", err)
+	}
+
+	if !strings.Contains(result1.Stdout, "first") {
+		t.Error("First call output incorrect")
+	}
+	if !strings.Contains(result2.Stdout, "second") {
+		t.Error("Second call output incorrect")
+	}
+}

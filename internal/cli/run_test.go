@@ -1094,3 +1094,75 @@ jobs:
 		t.Errorf("Expected error for invalid YAML, got nil")
 	}
 }
+
+// TestRunner_Run_DryRunMode tests dry-run mode
+func TestRunner_Run_DryRunMode(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Test Step
+        run: echo "hello"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor()
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "test",
+		WorkingDir: tmpDir,
+		DryRun:     true, // Enable dry-run mode
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Dry-run should not execute any commands
+	if len(mock.calls) != 0 {
+		t.Errorf("Expected no command executions in dry-run mode, got %d", len(mock.calls))
+	}
+
+	// Should still return results
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result in dry-run mode, got %d", len(results))
+	}
+
+	// Output should contain dry-run indicator
+	if !strings.Contains(stdout.String(), "DRY RUN") {
+		t.Error("Dry-run mode should output DRY RUN header")
+	}
+}
+
+// TestRunner_NewRunner tests NewRunner constructor
+func TestRunner_NewRunner(t *testing.T) {
+	exec := newMockExecutor()
+	runner := NewRunner(exec)
+
+	if runner == nil {
+		t.Error("NewRunner() should return non-nil runner")
+	}
+}
+
+// TestRunner_SetOutput tests SetOutput method
+func TestRunner_SetOutput(t *testing.T) {
+	runner := NewRunner(newMockExecutor())
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+
+	runner.SetOutput(stdout, stderr)
+
+	// Just verify it doesn't panic and can be called
+}
