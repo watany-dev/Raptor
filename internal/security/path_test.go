@@ -233,3 +233,54 @@ func TestValidateWorkingDirectory_ComplexTraversal(t *testing.T) {
 		})
 	}
 }
+
+// TestValidateWorkingDirectory_RelPathOutsideWorkspace tests paths that after resolution end up outside workspace
+func TestValidateWorkingDirectory_RelPathOutsideWorkspace(t *testing.T) {
+	tests := []struct {
+		name      string
+		workDir   string
+		basePath  string
+		wantError bool
+	}{
+		// These should all be caught by the earlier checks
+		{"simple parent", "..", "/repo", true},
+		{"parent sibling", "../sibling", "/repo", true},
+		{"deep and out", "a/b/c/../../../..", "/repo", true},
+		// These should be valid
+		{"nested then back", "a/../b", "/repo", false},
+		{"deep then back one", "a/b/c/../../d", "/repo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWorkingDirectory(tt.workDir, tt.basePath)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateWorkingDirectory(%q, %q) error = %v, wantError %v",
+					tt.workDir, tt.basePath, err, tt.wantError)
+			}
+		})
+	}
+}
+
+// TestValidateWorkingDirectory_AllBranches covers all code branches
+func TestValidateWorkingDirectory_AllBranches(t *testing.T) {
+	// Test empty path (returns nil immediately)
+	if err := ValidateWorkingDirectory("", "/repo"); err != nil {
+		t.Errorf("Empty path should be allowed, got error: %v", err)
+	}
+
+	// Test absolute path (should error)
+	if err := ValidateWorkingDirectory("/absolute/path", "/repo"); err == nil {
+		t.Error("Absolute path should return error")
+	}
+
+	// Test path starting with .. (should error)
+	if err := ValidateWorkingDirectory("../outside", "/repo"); err == nil {
+		t.Error("Path starting with .. should return error")
+	}
+
+	// Test valid relative path (should succeed)
+	if err := ValidateWorkingDirectory("valid/subdir", "/repo"); err != nil {
+		t.Errorf("Valid relative path should succeed, got error: %v", err)
+	}
+}

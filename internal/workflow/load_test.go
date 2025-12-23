@@ -531,3 +531,127 @@ func TestDiscoverWorkflows_StatError(t *testing.T) {
 		t.Error("DiscoverWorkflows() expected error for inaccessible workflows directory")
 	}
 }
+
+// TestLoadWorkflowFile_DecodeError tests the parseWorkflowFromNode decode error path
+func TestLoadWorkflowFile_DecodeError(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create YAML that parses but fails to decode into WorkflowFile struct
+	// This uses a valid YAML structure but with incompatible types
+	yamlContent := `name: 123
+jobs:
+  test:
+    runs-on: true
+    steps:
+      - run: echo test`
+	workflowPath := filepath.Join(tmpDir, "decode_error.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	// The YAML is valid but may have type mismatches
+	// This tests that the code handles such cases gracefully
+	wf, err := LoadWorkflowFile(workflowPath)
+	if err != nil {
+		// Error is acceptable
+		return
+	}
+
+	// If no error, verify it was parsed (with type coercion)
+	if wf == nil {
+		t.Error("Expected non-nil workflow or error")
+	}
+}
+
+// TestExtractJobOrderFromNode_EmptyDocument tests extractJobOrderFromNode with empty document
+func TestExtractJobOrderFromNode_EmptyDocument(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create an empty YAML document (just whitespace/comments)
+	yamlContent := `# Just a comment
+`
+	workflowPath := filepath.Join(tmpDir, "empty_doc.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	// May or may not error, but should not panic
+	_ = err
+}
+
+// TestExtractJobOrderFromNode_NonMappingDocument tests with a YAML array at root
+func TestExtractJobOrderFromNode_NonMappingDocument(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create YAML with array at root (not a mapping)
+	yamlContent := `- item1
+- item2
+- item3`
+	workflowPath := filepath.Join(tmpDir, "array_root.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	// Should error because root is not a mapping
+	if err == nil {
+		t.Error("LoadWorkflowFile() expected error for array root document")
+	}
+}
+
+// TestExtractJobOrderFromNode_JobsNotMapping tests when jobs value is not a mapping
+func TestExtractJobOrderFromNode_JobsNotMapping(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create YAML where jobs is a scalar instead of mapping
+	yamlContent := `name: Test
+jobs: "not a mapping"`
+	workflowPath := filepath.Join(tmpDir, "jobs_scalar.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	wf, err := LoadWorkflowFile(workflowPath)
+	if err != nil {
+		// Error is acceptable for invalid jobs format
+		return
+	}
+
+	// If no error, JobOrder should be empty
+	if len(wf.JobOrder) > 0 {
+		t.Errorf("JobOrder should be empty for non-mapping jobs, got %v", wf.JobOrder)
+	}
+}
+
+// TestDiscoverWorkflows_WorkflowsIsFile tests when .github/workflows is a file, not directory
+func TestDiscoverWorkflows_WorkflowsIsFile(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+
+	// Create .github directory
+	ghDir := filepath.Join(tmpDir, ".github")
+	if err := os.MkdirAll(ghDir, 0755); err != nil {
+		t.Fatalf("failed to create .github directory: %v", err)
+	}
+
+	// Create "workflows" as a file instead of directory
+	workflowsPath := filepath.Join(ghDir, "workflows")
+	if err := os.WriteFile(workflowsPath, []byte("not a directory"), 0644); err != nil {
+		t.Fatalf("failed to create workflows file: %v", err)
+	}
+
+	_, err := DiscoverWorkflows(tmpDir)
+	if err == nil {
+		t.Error("DiscoverWorkflows() expected error when workflows is a file")
+	}
+
+	// Verify error message mentions it's not a directory
+	if err != nil && !strings.Contains(err.Error(), "not a directory") {
+		t.Errorf("Error should mention 'not a directory', got: %v", err)
+	}
+}

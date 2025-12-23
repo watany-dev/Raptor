@@ -106,10 +106,14 @@ func verifyGitRepo(ctx context.Context, path string) error {
 	return nil
 }
 
+// randReader is the random reader used for generating IDs.
+// It can be replaced in tests to simulate errors.
+var randReader = rand.Reader
+
 // generateID generates a unique identifier for a workspace.
 func generateID() (string, error) {
 	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
+	if _, err := randReader.Read(b); err != nil {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil

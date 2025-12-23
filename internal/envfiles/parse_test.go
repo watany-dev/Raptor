@@ -600,3 +600,85 @@ func TestPrependPath_MultipleNewPaths(t *testing.T) {
 		t.Errorf("PrependPath = %q, want %q", result, expected)
 	}
 }
+
+// TestParseEnvFile_InvalidEnvVarValueSimpleFormat tests value validation error in simple KEY=VALUE format
+func TestParseEnvFile_InvalidEnvVarValueSimpleFormat(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Test with blocked env var value in simple format
+	// Note: The security validation checks the key name, not the value content
+	// So we need to use a blocked env var name
+	content := `LD_LIBRARY_PATH=/malicious/path`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	_, err := ParseEnvFile(envFile)
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for blocked env var LD_LIBRARY_PATH")
+	}
+}
+
+// TestParseEnvFile_HeredocInvalidValue tests heredoc value validation failure
+func TestParseEnvFile_HeredocInvalidValue(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Create a file with extremely long value that could trigger validation
+	// Using a value that exceeds reasonable limits
+	content := `DYLD_INSERT_LIBRARIES<<EOF
+/some/path
+EOF`
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	_, err := ParseEnvFile(envFile)
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for blocked env var DYLD_INSERT_LIBRARIES")
+	}
+}
+
+// TestParsePathFile_ScannerError tests the scanner.Err() path by creating a file
+// with a line that exceeds the default scanner buffer size
+func TestParsePathFile_ScannerError(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	pathFile := filepath.Join(tmpDir, "path")
+
+	// Create a file with a very long line (> 64KB to exceed default scanner buffer)
+	longLine := strings.Repeat("a", 70000)
+	content := "/usr/bin\n" + longLine + "\n/bin"
+	if err := os.WriteFile(pathFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write path file: %v", err)
+	}
+
+	_, err := ParsePathFile(pathFile)
+	// Should return an error because the line is too long for the scanner
+	if err == nil {
+		t.Error("ParsePathFile() expected error for line exceeding scanner buffer")
+	}
+}
+
+// TestParseEnvFile_ScannerError tests the scanner.Err() path for env files
+func TestParseEnvFile_ScannerError(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	envFile := filepath.Join(tmpDir, ".env")
+
+	// Create a file with a very long line (> 64KB to exceed default scanner buffer)
+	longLine := strings.Repeat("a", 70000)
+	content := "VAR1=value1\n" + longLine + "\nVAR2=value2"
+	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
+		t.Fatalf("Failed to write env file: %v", err)
+	}
+
+	_, err := ParseEnvFile(envFile)
+	// Should return an error because the line is too long for the scanner
+	if err == nil {
+		t.Error("ParseEnvFile() expected error for line exceeding scanner buffer")
+	}
+}
