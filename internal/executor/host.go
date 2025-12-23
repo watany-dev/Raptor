@@ -4,14 +4,27 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"sync"
 )
 
 // HostExecutor executes commands on the host system using a shell.
-type HostExecutor struct{}
+type HostExecutor struct {
+	cachedSysEnv []string
+	once         sync.Once
+}
 
 // NewHostExecutor creates a new HostExecutor instance.
 func NewHostExecutor() *HostExecutor {
 	return &HostExecutor{}
+}
+
+// getCachedSysEnv returns the cached system environment variables.
+// The cache is populated on first call using sync.Once for thread safety.
+func (h *HostExecutor) getCachedSysEnv() []string {
+	h.once.Do(func() {
+		h.cachedSysEnv = os.Environ()
+	})
+	return h.cachedSysEnv
 }
 
 // Execute runs the given command on the host system.
@@ -25,8 +38,10 @@ func (h *HostExecutor) Execute(config Config) (Result, error) {
 
 	// Set environment variables
 	if len(config.Env) > 0 {
-		// Start with current environment
-		cmd.Env = os.Environ()
+		// Use cached system environment to avoid repeated os.Environ() calls
+		sysEnv := h.getCachedSysEnv()
+		cmd.Env = make([]string, len(sysEnv), len(sysEnv)+len(config.Env))
+		copy(cmd.Env, sysEnv)
 		// Add custom environment variables
 		for key, value := range config.Env {
 			cmd.Env = append(cmd.Env, key+"="+value)

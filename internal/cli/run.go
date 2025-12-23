@@ -129,7 +129,8 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 		)
 	}
 
-	ws, err := worktree.CreateWorkspace(ctx, repoRoot)
+	// Pass verified=true since FindGitRoot already confirmed this is a git repository
+	ws, err := worktree.CreateWorkspace(ctx, repoRoot, true)
 	if err != nil {
 		return nil, noopCleanup, fmt.Errorf("failed to create workspace: %w", err)
 	}
