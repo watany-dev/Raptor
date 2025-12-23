@@ -246,8 +246,8 @@ jobs:
 			return
 		}
 
-		// If no error, JobOrder should be nil since jobs is not a mapping
-		if wf.JobOrder != nil && len(wf.JobOrder) > 0 {
+		// If no error, JobOrder should be empty since jobs is not a mapping
+		if len(wf.JobOrder) > 0 {
 			t.Errorf("JobOrder should be empty for non-mapping jobs, got %v", wf.JobOrder)
 		}
 	})
