@@ -79,7 +79,7 @@ func RemoveWorkspace(ctx context.Context, ws *Workspace) error {
 	if err := cmd.Run(); err != nil {
 		// If worktree remove fails, try to clean up manually
 		if removeErr := os.RemoveAll(ws.Path); removeErr != nil {
-			return fmt.Errorf("failed to remove worktree: %s (manual cleanup also failed: %v)",
+			return fmt.Errorf("failed to remove worktree: %s (manual cleanup also failed: %w)",
 				strings.TrimSpace(stderr.String()), removeErr)
 		}
 		// Prune the worktree reference

@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"sync"
@@ -61,7 +62,8 @@ func (h *HostExecutor) Execute(config Config) (Result, error) {
 
 	// Extract exit code
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
 			result.ExitCode = exitErr.ExitCode()
 		} else {
 			// Command failed to start
