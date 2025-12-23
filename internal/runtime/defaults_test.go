@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	"reflect"
+	"maps"
 	"testing"
 )
 
@@ -96,7 +96,7 @@ func TestMergeEnv(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := MergeEnv(tt.maps...)
-			if !reflect.DeepEqual(result, tt.expected) {
+			if !maps.Equal(result, tt.expected) {
 				t.Errorf("MergeEnv() = %v, expected %v", result, tt.expected)
 			}
 		})
