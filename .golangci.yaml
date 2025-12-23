@@ -1,0 +1,66 @@
+# golangci-lint configuration v2
+# https://golangci-lint.run/usage/configuration/
+
+version: "2"
+
+run:
+  # Timeout for analysis
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    # Error handling
+    - errcheck            # Check for unchecked errors
+    - errorlint           # Find code that may cause problems with error wrapping
+
+    # Code style
+    - misspell            # Find commonly misspelled English words
+
+    # Code quality
+    - gocritic            # Comprehensive linter with many checks
+    - unconvert           # Remove unnecessary type conversions
+    - govet               # Vet examines Go source code
+
+    # Complexity
+    - gocyclo             # Check cyclomatic complexity
+
+formatters:
+  enable:
+    - gofmt               # Check whether code was gofmt-ed
+    - goimports           # Check import statements are formatted
+
+linters-settings:
+  gocyclo:
+    min-complexity: 15
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+    disabled-checks:
+      - hugeParam          # Disabled: may conflict with design choices
+      - rangeValCopy       # Disabled: sometimes intentional
+
+  misspell:
+    locale: US
+
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+exclusions:
+  paths:
+    - testdata
+    - ".*_test\\.go$"
+  rules:
+    - path: _test\.go$
+      linters:
+        - errcheck
+
+issues:
+  # Maximum issues count per linter
+  max-issues-per-linter: 50
+  # Maximum count of issues with the same text
+  max-same-issues: 10
