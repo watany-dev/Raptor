@@ -330,25 +330,35 @@ func TestPrependPath(t *testing.T) {
 }
 
 // TestParseEnvFile_UnclosedHeredoc tests handling of unclosed heredoc delimiters
+// When a heredoc delimiter is never closed, the parser reads until EOF and uses all remaining content as the value
 func TestParseEnvFile_UnclosedHeredoc(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	envFile := filepath.Join(tmpDir, ".env")
 
-	content := `
-VAR1=simple
+	content := `VAR1=simple
 VAR2<<EOF
 multiline content
-but missing EOF line
-`
+but missing EOF line`
 	if err := os.WriteFile(envFile, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to write env file: %v", err)
 	}
 
-	_, err := ParseEnvFile(envFile)
-	// Should either return error or handle gracefully
-	// Unclosed heredoc may result in error or partial parse
-	_ = err
+	result, err := ParseEnvFile(envFile)
+	if err != nil {
+		t.Fatalf("ParseEnvFile() error = %v", err)
+	}
+
+	// VAR1 should be parsed correctly
+	if result["VAR1"] != "simple" {
+		t.Errorf("VAR1 = %q, want %q", result["VAR1"], "simple")
+	}
+
+	// VAR2 should contain all remaining content until EOF (unclosed heredoc behavior)
+	expectedVAR2 := "multiline content\nbut missing EOF line"
+	if result["VAR2"] != expectedVAR2 {
+		t.Errorf("VAR2 = %q, want %q", result["VAR2"], expectedVAR2)
+	}
 }
 
 // TestParseEnvFile_LongValue tests handling of long variable values

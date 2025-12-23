@@ -363,49 +363,32 @@ func TestRunCommand_ParseError(t *testing.T) {
 	}
 }
 
-// TestMain_Coverage tests the main function using subprocess
-// This is a special test pattern to achieve coverage of main()
-func TestMain_Coverage(t *testing.T) {
-	if os.Getenv("TEST_MAIN_COVERAGE") == "1" {
-		// When called as subprocess, run main
-		main()
-		return
+// TestRun_Commands tests that the run() function handles all command types correctly
+// This provides coverage for the CLI entry points without needing subprocess testing
+func TestRun_Commands(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr bool
+	}{
+		{"empty args", []string{}, false},
+		{"help command", []string{"help"}, false},
+		{"help flag -h", []string{"-h"}, false},
+		{"help flag --help", []string{"--help"}, false},
+		{"version command", []string{"version"}, false},
+		{"version flag -v", []string{"-v"}, false},
+		{"version flag --version", []string{"--version"}, false},
+		{"unknown command", []string{"unknown"}, true},
 	}
 
-	// Build the test binary
-	tmpDir := t.TempDir()
-	binPath := filepath.Join(tmpDir, "raptor")
-
-	// Use go build with cover flag
-	buildCmd := exec.Command("go", "build", "-cover", "-o", binPath, ".")
-	buildCmd.Dir = filepath.Dir(os.Args[0])
-	buildCmd.Stderr = os.Stderr
-	if testing.Short() {
-		t.Skip("skipping main coverage test in short mode")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := run(tt.args)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("run(%v) error = %v; wantErr %v", tt.args, err, tt.wantErr)
+			}
+		})
 	}
-
-	// Test help command (should succeed)
-	t.Run("help succeeds", func(t *testing.T) {
-		cmd := exec.Command(os.Args[0], "-test.run=TestMain_Coverage")
-		cmd.Env = append(os.Environ(), "TEST_MAIN_COVERAGE=1")
-		cmd.Args = append(cmd.Args, "--", "help")
-		err := cmd.Run()
-		if err != nil {
-			// The test framework might exit non-zero, that's okay
-			t.Logf("help command: %v", err)
-		}
-	})
-
-	// Test version command (should succeed)
-	t.Run("version succeeds", func(t *testing.T) {
-		cmd := exec.Command(os.Args[0], "-test.run=TestMain_Coverage")
-		cmd.Env = append(os.Environ(), "TEST_MAIN_COVERAGE=1")
-		cmd.Args = append(cmd.Args, "--", "version")
-		err := cmd.Run()
-		if err != nil {
-			t.Logf("version command: %v", err)
-		}
-	})
 }
 
 // TestRunCommand_MultipleJobsWithFailure tests multiple jobs where one fails
