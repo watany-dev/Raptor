@@ -85,10 +85,16 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 	stepEnv := runtime.MergeEnv(ctx.AccumulatedEnv, step.Env)
 
 	// Evaluate if condition
-	shouldRun, err := se.evaluator.Evaluate(step.If, stepEnv, ctx.StepsContext, ctx.JobSuccess)
+	shouldRun, err := se.evaluator.EvaluateWithWorkDir(step.If, stepEnv, ctx.StepsContext, ctx.JobSuccess, se.workDir)
 	if err != nil {
+		if se.evaluator.StrictMode {
+			// In strict mode, fail the step on evaluation error
+			_, _ = fmt.Fprintf(se.stderr, "Error: failed to evaluate if condition: %v\n", err)
+			_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
+			return nil, fmt.Errorf("condition evaluation failed: %w", err)
+		}
+		// In permissive mode, log warning and continue
 		_, _ = fmt.Fprintf(se.stderr, "Warning: failed to evaluate if condition: %v\n", err)
-		// On evaluation error, default to running the step
 		shouldRun = true
 	}
 

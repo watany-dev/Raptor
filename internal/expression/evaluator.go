@@ -26,11 +26,18 @@ type EvaluationContext struct {
 }
 
 // ConditionEvaluator evaluates step if conditions.
-type ConditionEvaluator struct{}
+type ConditionEvaluator struct {
+	// StrictMode controls error handling behavior.
+	// If true (default), evaluation errors cause the workflow to stop.
+	// If false, evaluation errors are logged as warnings and the step runs.
+	StrictMode bool
+}
 
-// NewConditionEvaluator creates a new ConditionEvaluator.
+// NewConditionEvaluator creates a new ConditionEvaluator with strict mode enabled.
 func NewConditionEvaluator() *ConditionEvaluator {
-	return &ConditionEvaluator{}
+	return &ConditionEvaluator{
+		StrictMode: true,
+	}
 }
 
 // Evaluate evaluates the if condition for a step.
@@ -66,6 +73,9 @@ func (ce *ConditionEvaluator) EvaluateWithWorkDir(
 	// Parse the expression
 	node, err := ParseExpression(cond)
 	if err != nil {
+		if ce.StrictMode {
+			return false, fmt.Errorf("condition parse error: %v", err)
+		}
 		return true, fmt.Errorf("parse error: %v (defaulting to true)", err)
 	}
 
@@ -80,6 +90,9 @@ func (ce *ConditionEvaluator) EvaluateWithWorkDir(
 	// Evaluate the AST
 	result, err := evaluateNode(node, ctx)
 	if err != nil {
+		if ce.StrictMode {
+			return false, fmt.Errorf("condition evaluation error: %v", err)
+		}
 		return true, fmt.Errorf("evaluation error: %v (defaulting to true)", err)
 	}
 
