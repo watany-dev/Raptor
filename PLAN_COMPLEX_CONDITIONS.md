@@ -4,20 +4,6 @@
 
 すべてのフェーズが実装完了しました。
 
-### ライブラリ移行 (2024年12月24日)
-
-独自実装のトークナイザー/パーサー/ASTを `expr-lang/expr` ライブラリに移行しました。
-
-**削除されたファイル**:
-- `tokenizer.go`, `tokenizer_test.go`
-- `parser.go`, `parser_test.go`
-- `ast.go`
-
-**変更点**:
-- `evaluator.go` を `expr-lang/expr` を使用するように書き換え
-- コード行数: ~850行 → ~220行 (約75%削減)
-- 全テストが継続してパス
-
 ## 目標
 `internal/expression/evaluator.go` を拡張し、以下の構文に対応する：
 - AND/OR演算子 (`&&`, `||`) ✅

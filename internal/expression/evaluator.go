@@ -8,8 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-
-	"github.com/expr-lang/expr"
 )
 
 // StepContext holds the result of a step for condition evaluation.
@@ -21,10 +19,10 @@ type StepContext struct {
 
 // EvaluationContext holds all context needed to evaluate an expression.
 type EvaluationContext struct {
-	Env        map[string]interface{}
-	Steps      map[string]interface{}
-	JobSuccess bool
-	WorkDir    string
+	Env          map[string]string
+	StepsContext map[string]*StepContext
+	JobSuccess   bool
+	WorkDir      string // for hashFiles()
 }
 
 // ConditionEvaluator evaluates step if conditions.
@@ -54,6 +52,7 @@ func (ce *ConditionEvaluator) EvaluateWithWorkDir(
 	jobSuccess bool,
 	workDir string,
 ) (bool, error) {
+	// If no condition is specified, use default behavior (run if previous steps succeeded)
 	if condition == "" {
 		return jobSuccess, nil
 	}
@@ -64,158 +63,299 @@ func (ce *ConditionEvaluator) EvaluateWithWorkDir(
 		cond = strings.TrimSpace(cond[3 : len(cond)-2])
 	}
 
-	// Preprocess: rename functions that conflict with expr built-in operators
-	// The expr library uses 'contains', 'startsWith', 'endsWith' as infix operators,
-	// but GitHub Actions uses function call syntax. We rename to avoid conflicts.
-	cond = preprocessCondition(cond)
-
-	// Build env map for expr
-	envMap := make(map[string]interface{})
-	for k, v := range env {
-		envMap[k] = v
-	}
-
-	// Build steps map for expr
-	stepsMap := make(map[string]interface{})
-	for k, v := range stepsContext {
-		stepMap := map[string]interface{}{
-			"outcome":    v.Outcome,
-			"conclusion": v.Conclusion,
-		}
-		if v.Outputs != nil {
-			outputsMap := make(map[string]interface{})
-			for ok, ov := range v.Outputs {
-				outputsMap[ok] = ov
-			}
-			stepMap["outputs"] = outputsMap
-		} else {
-			stepMap["outputs"] = map[string]interface{}{}
-		}
-		stepsMap[k] = stepMap
-	}
-
-	// Set up working directory for hashFiles
-	if workDir == "" {
-		workDir, _ = os.Getwd()
-	}
-
-	// Create evaluation environment
-	evalEnv := map[string]interface{}{
-		"env":   envMap,
-		"steps": stepsMap,
-		// Status functions
-		"success":   func() bool { return jobSuccess },
-		"failure":   func() bool { return !jobSuccess },
-		"always":    func() bool { return true },
-		"cancelled": func() bool { return false },
-	}
-
-	// Define custom functions using expr.Function()
-	// Note: We use prefixed names (gha_*) to avoid conflicts with expr built-in operators
-	containsFunc := expr.Function(
-		"gha_contains",
-		func(params ...any) (any, error) {
-			s := fmt.Sprintf("%v", params[0])
-			substr := fmt.Sprintf("%v", params[1])
-			return strings.Contains(strings.ToLower(s), strings.ToLower(substr)), nil
-		},
-		new(func(string, string) bool),
-	)
-
-	startsWithFunc := expr.Function(
-		"gha_startsWith",
-		func(params ...any) (any, error) {
-			s := fmt.Sprintf("%v", params[0])
-			prefix := fmt.Sprintf("%v", params[1])
-			return strings.HasPrefix(strings.ToLower(s), strings.ToLower(prefix)), nil
-		},
-		new(func(string, string) bool),
-	)
-
-	endsWithFunc := expr.Function(
-		"gha_endsWith",
-		func(params ...any) (any, error) {
-			s := fmt.Sprintf("%v", params[0])
-			suffix := fmt.Sprintf("%v", params[1])
-			return strings.HasSuffix(strings.ToLower(s), strings.ToLower(suffix)), nil
-		},
-		new(func(string, string) bool),
-	)
-
-	hashFilesFunc := expr.Function(
-		"gha_hashFiles",
-		func(params ...any) (any, error) {
-			patterns := make([]string, len(params))
-			for i, p := range params {
-				patterns[i] = fmt.Sprintf("%v", p)
-			}
-			return hashFiles(patterns, workDir), nil
-		},
-		new(func(...string) string),
-	)
-
-	// Compile and run the expression
-	program, err := expr.Compile(cond,
-		expr.Env(evalEnv),
-		expr.AsBool(),
-		containsFunc,
-		startsWithFunc,
-		endsWithFunc,
-		hashFilesFunc,
-		expr.AllowUndefinedVariables(),
-	)
+	// Parse the expression
+	node, err := ParseExpression(cond)
 	if err != nil {
 		return true, fmt.Errorf("parse error: %v (defaulting to true)", err)
 	}
 
-	result, err := expr.Run(program, evalEnv)
+	// Create evaluation context
+	ctx := &EvaluationContext{
+		Env:          env,
+		StepsContext: stepsContext,
+		JobSuccess:   jobSuccess,
+		WorkDir:      workDir,
+	}
+
+	// Evaluate the AST
+	result, err := evaluateNode(node, ctx)
 	if err != nil {
 		return true, fmt.Errorf("evaluation error: %v (defaulting to true)", err)
 	}
 
-	if b, ok := result.(bool); ok {
-		return b, nil
-	}
-
-	return true, fmt.Errorf("expression did not return boolean (defaulting to true)")
+	// Convert result to boolean
+	return toBool(result), nil
 }
 
-// preprocessCondition converts GitHub Actions function names to expr-compatible names.
-// This is needed because 'contains', 'startsWith', and 'endsWith' are built-in operators
-// in the expr library, but GitHub Actions uses them as function calls.
-func preprocessCondition(cond string) string {
-	// Replace function names with prefixed versions to avoid operator conflicts
-	// We need to be careful to only replace function calls, not arbitrary text
-	replacements := []struct {
-		from string
-		to   string
-	}{
-		{"contains(", "gha_contains("},
-		{"startsWith(", "gha_startsWith("},
-		{"endsWith(", "gha_endsWith("},
-		{"hashFiles(", "gha_hashFiles("},
-	}
+// evaluateNode evaluates an AST node and returns the result.
+func evaluateNode(node Node, ctx *EvaluationContext) (interface{}, error) {
+	switch n := node.(type) {
+	case *BoolLiteral:
+		return n.Value, nil
 
-	result := cond
-	for _, r := range replacements {
-		result = strings.ReplaceAll(result, r.from, r.to)
+	case *StringLiteral:
+		return n.Value, nil
+
+	case *Identifier:
+		return resolveIdentifier(n.Value, ctx)
+
+	case *CallExpr:
+		return evaluateCall(n, ctx)
+
+	case *UnaryExpr:
+		return evaluateUnary(n, ctx)
+
+	case *BinaryExpr:
+		return evaluateBinary(n, ctx)
+
+	default:
+		return nil, fmt.Errorf("unknown node type: %T", node)
 	}
-	return result
 }
 
-// hashFiles calculates SHA256 hash of files matching the patterns.
-func hashFiles(patterns []string, workDir string) string {
-	if len(patterns) == 0 {
-		return ""
+// resolveIdentifier resolves an identifier to its value.
+func resolveIdentifier(name string, ctx *EvaluationContext) (interface{}, error) {
+	// Handle env.VAR
+	if strings.HasPrefix(name, "env.") {
+		varName := strings.TrimPrefix(name, "env.")
+		if ctx.Env != nil {
+			return ctx.Env[varName], nil
+		}
+		return "", nil
+	}
+
+	// Handle steps.ID.outcome or steps.ID.conclusion
+	if strings.HasPrefix(name, "steps.") {
+		parts := strings.SplitN(name, ".", 3)
+		if len(parts) >= 3 && ctx.StepsContext != nil {
+			stepID := parts[1]
+			property := parts[2]
+			if step, ok := ctx.StepsContext[stepID]; ok {
+				switch property {
+				case "outcome":
+					return step.Outcome, nil
+				case "conclusion":
+					return step.Conclusion, nil
+				}
+				// Handle steps.ID.outputs.NAME
+				if strings.HasPrefix(property, "outputs.") {
+					outputName := strings.TrimPrefix(property, "outputs.")
+					if step.Outputs != nil {
+						return step.Outputs[outputName], nil
+					}
+				}
+			}
+		}
+		return "", nil
+	}
+
+	// Return the identifier as-is (could be a variable reference we don't understand)
+	return name, nil
+}
+
+// evaluateCall evaluates a function call expression.
+func evaluateCall(call *CallExpr, ctx *EvaluationContext) (interface{}, error) {
+	switch call.FuncName {
+	case "always":
+		return true, nil
+
+	case "success":
+		return ctx.JobSuccess, nil
+
+	case "failure":
+		return !ctx.JobSuccess, nil
+
+	case "cancelled":
+		return false, nil
+
+	case "contains":
+		return evalContains(call.Arguments, ctx)
+
+	case "startsWith":
+		return evalStartsWith(call.Arguments, ctx)
+
+	case "endsWith":
+		return evalEndsWith(call.Arguments, ctx)
+
+	case "hashFiles":
+		return evalHashFiles(call.Arguments, ctx)
+
+	default:
+		return nil, fmt.Errorf("unknown function: %s", call.FuncName)
+	}
+}
+
+// evaluateUnary evaluates a unary expression.
+func evaluateUnary(unary *UnaryExpr, ctx *EvaluationContext) (interface{}, error) {
+	operand, err := evaluateNode(unary.Operand, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	switch unary.Operator {
+	case TOKEN_NOT:
+		return !toBool(operand), nil
+	default:
+		return nil, fmt.Errorf("unknown unary operator: %v", unary.Operator)
+	}
+}
+
+// evaluateBinary evaluates a binary expression.
+func evaluateBinary(binary *BinaryExpr, ctx *EvaluationContext) (interface{}, error) {
+	// Short-circuit evaluation for && and ||
+	switch binary.Operator {
+	case TOKEN_AND:
+		left, err := evaluateNode(binary.Left, ctx)
+		if err != nil {
+			return nil, err
+		}
+		if !toBool(left) {
+			return false, nil // Short-circuit: false && anything = false
+		}
+		right, err := evaluateNode(binary.Right, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return toBool(right), nil
+
+	case TOKEN_OR:
+		left, err := evaluateNode(binary.Left, ctx)
+		if err != nil {
+			return nil, err
+		}
+		if toBool(left) {
+			return true, nil // Short-circuit: true || anything = true
+		}
+		right, err := evaluateNode(binary.Right, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return toBool(right), nil
+
+	case TOKEN_EQ:
+		left, err := evaluateNode(binary.Left, ctx)
+		if err != nil {
+			return nil, err
+		}
+		right, err := evaluateNode(binary.Right, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return toString(left) == toString(right), nil
+
+	case TOKEN_NE:
+		left, err := evaluateNode(binary.Left, ctx)
+		if err != nil {
+			return nil, err
+		}
+		right, err := evaluateNode(binary.Right, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return toString(left) != toString(right), nil
+
+	default:
+		return nil, fmt.Errorf("unknown binary operator: %v", binary.Operator)
+	}
+}
+
+// evalContains evaluates the contains(haystack, needle) function.
+// Returns true if haystack contains needle (case-insensitive).
+func evalContains(args []Node, ctx *EvaluationContext) (bool, error) {
+	if len(args) != 2 {
+		return false, fmt.Errorf("contains() requires 2 arguments, got %d", len(args))
+	}
+
+	haystack, err := evaluateNode(args[0], ctx)
+	if err != nil {
+		return false, err
+	}
+	needle, err := evaluateNode(args[1], ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return strings.Contains(
+		strings.ToLower(toString(haystack)),
+		strings.ToLower(toString(needle)),
+	), nil
+}
+
+// evalStartsWith evaluates the startsWith(str, prefix) function.
+// Returns true if str starts with prefix (case-insensitive).
+func evalStartsWith(args []Node, ctx *EvaluationContext) (bool, error) {
+	if len(args) != 2 {
+		return false, fmt.Errorf("startsWith() requires 2 arguments, got %d", len(args))
+	}
+
+	str, err := evaluateNode(args[0], ctx)
+	if err != nil {
+		return false, err
+	}
+	prefix, err := evaluateNode(args[1], ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return strings.HasPrefix(
+		strings.ToLower(toString(str)),
+		strings.ToLower(toString(prefix)),
+	), nil
+}
+
+// evalEndsWith evaluates the endsWith(str, suffix) function.
+// Returns true if str ends with suffix (case-insensitive).
+func evalEndsWith(args []Node, ctx *EvaluationContext) (bool, error) {
+	if len(args) != 2 {
+		return false, fmt.Errorf("endsWith() requires 2 arguments, got %d", len(args))
+	}
+
+	str, err := evaluateNode(args[0], ctx)
+	if err != nil {
+		return false, err
+	}
+	suffix, err := evaluateNode(args[1], ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return strings.HasSuffix(
+		strings.ToLower(toString(str)),
+		strings.ToLower(toString(suffix)),
+	), nil
+}
+
+// evalHashFiles evaluates the hashFiles(pattern...) function.
+// Returns the SHA256 hash of the contents of files matching the patterns.
+func evalHashFiles(args []Node, ctx *EvaluationContext) (string, error) {
+	if len(args) == 0 {
+		return "", nil
+	}
+
+	workDir := ctx.WorkDir
+	if workDir == "" {
+		var err error
+		workDir, err = os.Getwd()
+		if err != nil {
+			return "", nil
+		}
 	}
 
 	var allBytes []byte
-	for _, pattern := range patterns {
+	for _, arg := range args {
+		patternVal, err := evaluateNode(arg, ctx)
+		if err != nil {
+			return "", err
+		}
+		pattern := toString(patternVal)
+
+		// Use doublestar for ** glob patterns
 		matches, err := filepath.Glob(filepath.Join(workDir, pattern))
 		if err != nil {
 			continue
 		}
 
+		// Sort for consistent hashing
 		sort.Strings(matches)
 
 		for _, match := range matches {
@@ -232,9 +372,40 @@ func hashFiles(patterns []string, workDir string) string {
 	}
 
 	if len(allBytes) == 0 {
-		return ""
+		return "", nil
 	}
 
 	hash := sha256.Sum256(allBytes)
-	return hex.EncodeToString(hash[:])
+	return hex.EncodeToString(hash[:]), nil
+}
+
+// toBool converts a value to a boolean.
+func toBool(v interface{}) bool {
+	switch val := v.(type) {
+	case bool:
+		return val
+	case string:
+		return val != "" && val != "false" && val != "0"
+	case int:
+		return val != 0
+	case float64:
+		return val != 0
+	default:
+		return v != nil
+	}
+}
+
+// toString converts a value to a string.
+func toString(v interface{}) string {
+	switch val := v.(type) {
+	case string:
+		return val
+	case bool:
+		if val {
+			return "true"
+		}
+		return "false"
+	default:
+		return fmt.Sprintf("%v", v)
+	}
 }

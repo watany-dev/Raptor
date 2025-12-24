@@ -136,11 +136,27 @@ func TestConditionEvaluator_Evaluate(t *testing.T) {
 			want:       false,
 		},
 		{
+			name:         "steps outcome comparison - step not found",
+			condition:    "steps.nonexistent.outcome == 'success'",
+			env:          nil,
+			stepsContext: map[string]*StepContext{},
+			jobSuccess:   true,
+			want:         false,
+		},
+		{
 			name:       "condition with ${{ }} wrapper",
 			condition:  "${{ always() }}",
 			env:        nil,
 			jobSuccess: false,
 			want:       true,
+		},
+		{
+			name:       "identifier resolves to truthy value",
+			condition:  "some.unsupported.syntax",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+			wantErr:    false,
 		},
 		{
 			name:       "parse error returns true with error",
@@ -301,6 +317,23 @@ func TestConditionEvaluator_Evaluate(t *testing.T) {
 			jobSuccess: true,
 			want:       false,
 		},
+		// Short-circuit evaluation tests
+		{
+			name:       "short-circuit AND - left false",
+			condition:  "false && unknown_func()",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+			wantErr:    false, // Should not error due to short-circuit
+		},
+		{
+			name:       "short-circuit OR - left true",
+			condition:  "true || unknown_func()",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+			wantErr:    false, // Should not error due to short-circuit
+		},
 	}
 
 	for _, tt := range tests {
@@ -406,12 +439,58 @@ func TestEvaluator_AdditionalCoverage(t *testing.T) {
 			jobSuccess: true,
 			want:       true,
 		},
+		// Unknown function test
+		{
+			name:       "unknown function returns error",
+			condition:  "unknownFunc()",
+			jobSuccess: true,
+			want:       true,
+			wantErr:    true,
+		},
+		// Function with wrong number of arguments
+		{
+			name:       "contains with wrong args",
+			condition:  "contains('only one arg')",
+			jobSuccess: true,
+			want:       true,
+			wantErr:    true,
+		},
+		{
+			name:       "startsWith with wrong args",
+			condition:  "startsWith('only one arg')",
+			jobSuccess: true,
+			want:       true,
+			wantErr:    true,
+		},
+		{
+			name:       "endsWith with wrong args",
+			condition:  "endsWith('only one arg')",
+			jobSuccess: true,
+			want:       true,
+			wantErr:    true,
+		},
 		// Double negation
 		{
 			name:       "double negation",
 			condition:  "!!true",
 			jobSuccess: true,
 			want:       true,
+		},
+		// Empty env variable
+		{
+			name:       "empty env variable equals empty string",
+			condition:  "env.MISSING == ''",
+			env:        map[string]string{},
+			jobSuccess: true,
+			want:       true,
+		},
+		// Missing step returns empty
+		{
+			name:         "missing step outcome",
+			condition:    "steps.missing.outcome == ''",
+			stepsContext: map[string]*StepContext{},
+			jobSuccess:   true,
+			want:         true,
 		},
 	}
 
@@ -438,6 +517,99 @@ func TestEvaluator_AdditionalCoverage(t *testing.T) {
 	}
 }
 
+func TestToBool(t *testing.T) {
+	tests := []struct {
+		name  string
+		input interface{}
+		want  bool
+	}{
+		{"bool true", true, true},
+		{"bool false", false, false},
+		{"string non-empty", "hello", true},
+		{"string empty", "", false},
+		{"string false", "false", false},
+		{"string 0", "0", false},
+		{"int non-zero", 42, true},
+		{"int zero", 0, false},
+		{"float non-zero", 3.14, true},
+		{"float zero", 0.0, false},
+		{"nil", nil, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toBool(tt.input)
+			if got != tt.want {
+				t.Errorf("toBool(%v) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestToString(t *testing.T) {
+	tests := []struct {
+		name  string
+		input interface{}
+		want  string
+	}{
+		{"string", "hello", "hello"},
+		{"bool true", true, "true"},
+		{"bool false", false, "false"},
+		{"int", 42, "42"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := toString(tt.input)
+			if got != tt.want {
+				t.Errorf("toString(%v) = %v, want %v", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestASTNodes tests that AST node types implement the Node interface
+func TestASTNodes(t *testing.T) {
+	// These calls exercise the node() methods for coverage
+	var nodes []Node
+	nodes = append(nodes, &BinaryExpr{})
+	nodes = append(nodes, &UnaryExpr{})
+	nodes = append(nodes, &CallExpr{})
+	nodes = append(nodes, &Identifier{})
+	nodes = append(nodes, &StringLiteral{})
+	nodes = append(nodes, &BoolLiteral{})
+
+	// Call node() on each to satisfy interface and coverage
+	for _, n := range nodes {
+		n.node() // This exercises the empty node() methods
+	}
+
+	if len(nodes) != 6 {
+		t.Error("Expected 6 node types")
+	}
+}
+
+func TestParserErrors(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		{"missing closing paren", "(true", true},
+		{"missing closing paren in func", "contains('a', 'b'", true},
+		{"unexpected token", "true &&", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseExpression(tt.input)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseExpression(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestHashFilesEdgeCases(t *testing.T) {
 	evaluator := NewConditionEvaluator()
 
@@ -455,68 +627,40 @@ func TestHashFilesEdgeCases(t *testing.T) {
 	if !result {
 		t.Error("hashFiles() with no args should return empty string")
 	}
-
-	// Test hashFiles with directory (should skip directories)
-	tmpDir := t.TempDir()
-	subDir := tmpDir + "/subdir"
-	if err := os.MkdirAll(subDir, 0755); err != nil {
-		t.Fatalf("failed to create subdir: %v", err)
-	}
-	// Create a file too
-	if err := os.WriteFile(tmpDir+"/file.txt", []byte("content"), 0644); err != nil {
-		t.Fatalf("failed to create file: %v", err)
-	}
-
-	result, err = evaluator.EvaluateWithWorkDir(
-		"hashFiles('*') != ''",
-		nil,
-		nil,
-		true,
-		tmpDir,
-	)
-	if err != nil {
-		t.Errorf("hashFiles() with directory unexpected error: %v", err)
-	}
-	if !result {
-		t.Error("hashFiles('*') should return non-empty when files exist")
-	}
-
-	// Test hashFiles with invalid glob pattern (should continue without error)
-	result, err = evaluator.EvaluateWithWorkDir(
-		"hashFiles('[invalid') == ''",
-		nil,
-		nil,
-		true,
-		tmpDir,
-	)
-	if err != nil {
-		t.Errorf("hashFiles() with invalid pattern unexpected error: %v", err)
-	}
-	if !result {
-		t.Error("hashFiles('[invalid') should return empty string for invalid pattern")
-	}
 }
 
-func TestEvaluatorErrorCases(t *testing.T) {
+func TestErrorPropagation(t *testing.T) {
 	evaluator := NewConditionEvaluator()
 
-	// Test evaluation error - accessing undefined variable in strict context
-	// Note: With AllowUndefinedVariables(), most undefined vars return nil
-	// We need to trigger an actual runtime error
+	tests := []struct {
+		name      string
+		condition string
+	}{
+		// Errors in binary expressions (non-short-circuit path)
+		{"error in AND right side", "true && unknownFunc()"},
+		{"error in OR right side", "false || unknownFunc()"},
+		{"error in EQ left side", "unknownFunc() == 'value'"},
+		{"error in EQ right side", "'value' == unknownFunc()"},
+		{"error in NE left side", "unknownFunc() != 'value'"},
+		{"error in NE right side", "'value' != unknownFunc()"},
+		// Errors in unary expressions
+		{"error in NOT operand", "!unknownFunc()"},
+		// Errors in function arguments
+		{"error in contains first arg", "contains(unknownFunc(), 'x')"},
+		{"error in contains second arg", "contains('x', unknownFunc())"},
+		{"error in startsWith first arg", "startsWith(unknownFunc(), 'x')"},
+		{"error in startsWith second arg", "startsWith('x', unknownFunc())"},
+		{"error in endsWith first arg", "endsWith(unknownFunc(), 'x')"},
+		{"error in endsWith second arg", "endsWith('x', unknownFunc())"},
+		{"error in hashFiles arg", "hashFiles(unknownFunc())"},
+	}
 
-	// Test with nil env and accessing nested property that doesn't exist
-	// This should still work due to AllowUndefinedVariables
-	result, err := evaluator.Evaluate(
-		"undefined_var.nested == 'value'",
-		nil,
-		nil,
-		true,
-	)
-	// The expression should handle undefined gracefully
-	if err != nil {
-		// If there's an error, result should be true (default)
-		if !result {
-			t.Errorf("Expected result to be true when error occurs, got false")
-		}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := evaluator.Evaluate(tt.condition, nil, nil, true)
+			if err == nil {
+				t.Errorf("expected error for %q", tt.condition)
+			}
+		})
 	}
 }
