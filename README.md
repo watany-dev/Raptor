@@ -192,7 +192,7 @@ Currently supported GitHub Actions syntax:
 | `working-directory` | ✅ |
 | `GITHUB_ENV` | ✅ |
 | `GITHUB_PATH` | ✅ |
-| `if` (conditionals) | ✅ (basic syntax) |
+| `if` (conditionals) | ✅ (full support with AND/OR/NOT, string functions, hashFiles) |
 | `uses` (actions) | ❌ |
 | `with` (action inputs) | ❌ |
 | `matrix` (matrix builds) | ❌ |
@@ -218,6 +218,18 @@ steps:
   - name: Always (even on failure)
     if: always()
     run: echo "Cleanup step"
+
+  - name: Complex conditions with AND/OR
+    if: ${{ success() && env.DEPLOY_ENV == 'production' }}
+    run: echo "Deploy to production"
+
+  - name: String functions
+    if: ${{ startsWith(env.BRANCH_NAME, 'feature/') }}
+    run: echo "Feature branch detected"
+
+  - name: File hash for caching
+    if: ${{ hashFiles('package.json') != '' }}
+    run: echo "package.json exists"
 ```
 
 **Supported conditional syntax:**
@@ -232,6 +244,14 @@ steps:
 | `${{ env.VAR == 'value' }}` | Environment variable comparison |
 | `${{ env.VAR != 'value' }}` | Environment variable negation |
 | `${{ steps.ID.outcome == 'success' }}` | Step result reference |
+| `${{ expr1 && expr2 }}` | Logical AND operator |
+| `${{ expr1 \|\| expr2 }}` | Logical OR operator |
+| `${{ !expr }}` | Logical NOT operator |
+| `${{ (expr) }}` | Grouping with parentheses |
+| `contains(search, item)` | Check if string/array contains value |
+| `startsWith(search, prefix)` | Check if string starts with prefix |
+| `endsWith(search, suffix)` | Check if string ends with suffix |
+| `hashFiles(pattern, ...)` | Calculate SHA-256 hash of files matching patterns |
 
 ### Sample Workflow
 
