@@ -880,11 +880,11 @@ func TestStepExecutor_handleUnsupportedAction(t *testing.T) {
 
 		// Check output contains warning message
 		output := stdout.String()
-		if !bytes.Contains([]byte(output), []byte("Skipping step")) {
-			t.Error("Output should contain 'Skipping step'")
+		if !bytes.Contains([]byte(output), []byte("Skipping")) {
+			t.Error("Output should contain 'Skipping'")
 		}
-		if !bytes.Contains([]byte(output), []byte("GitHub Actions")) {
-			t.Error("Output should mention 'GitHub Actions'")
+		if !bytes.Contains([]byte(output), []byte("uses: not supported")) {
+			t.Error("Output should mention 'uses: not supported'")
 		}
 		if !bytes.Contains([]byte(output), []byte("actions/checkout@v4")) {
 			t.Error("Output should contain the action name")
