@@ -16,7 +16,7 @@ func BenchmarkEvalContains(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("contains(env.GITHUB_REF, 'feature')", env, nil, true)
+		_, _ = evaluator.Evaluate("contains(env.GITHUB_REF, 'feature')", env, nil, true)
 	}
 }
 
@@ -29,7 +29,7 @@ func BenchmarkEvalStartsWith(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("startsWith(env.GITHUB_REF, 'refs/heads/')", env, nil, true)
+		_, _ = evaluator.Evaluate("startsWith(env.GITHUB_REF, 'refs/heads/')", env, nil, true)
 	}
 }
 
@@ -42,7 +42,7 @@ func BenchmarkEvalEndsWith(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("endsWith(env.FILENAME, '.pdf')", env, nil, true)
+		_, _ = evaluator.Evaluate("endsWith(env.FILENAME, '.pdf')", env, nil, true)
 	}
 }
 
@@ -57,7 +57,7 @@ func BenchmarkEvalContainsLongString(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("contains(env.LONG_VAR, 'performance')", env, nil, true)
+		_, _ = evaluator.Evaluate("contains(env.LONG_VAR, 'performance')", env, nil, true)
 	}
 }
 
@@ -73,7 +73,7 @@ func BenchmarkEvalComplexCondition(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate(
+		_, _ = evaluator.Evaluate(
 			"(contains(env.GITHUB_REF, 'main') || startsWith(env.GITHUB_REF, 'refs/tags/')) && env.RUNNER_OS == 'Linux'",
 			env, nil, true)
 	}
@@ -85,7 +85,7 @@ func BenchmarkEvalSuccess(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("success()", nil, nil, true)
+		_, _ = evaluator.Evaluate("success()", nil, nil, true)
 	}
 }
 
@@ -95,7 +95,7 @@ func BenchmarkEvalAlways(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("always()", nil, nil, true)
+		_, _ = evaluator.Evaluate("always()", nil, nil, true)
 	}
 }
 
@@ -110,7 +110,7 @@ func BenchmarkEvalStepsContext(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.Evaluate("steps.build.outcome == 'success' && steps.test.outcome == 'success'", nil, stepsCtx, true)
+		_, _ = evaluator.Evaluate("steps.build.outcome == 'success' && steps.test.outcome == 'success'", nil, stepsCtx, true)
 	}
 }
 
@@ -120,7 +120,7 @@ func BenchmarkParseExpression(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ParseExpression(expr)
+		_, _ = ParseExpression(expr)
 	}
 }
 
@@ -130,7 +130,7 @@ func BenchmarkParseComplexExpression(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		ParseExpression(expr)
+		_, _ = ParseExpression(expr)
 	}
 }
 
@@ -140,7 +140,7 @@ func BenchmarkTokenize(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		Tokenize(expr)
+		_, _ = Tokenize(expr)
 	}
 }
 
@@ -167,7 +167,7 @@ func BenchmarkHashFilesSmall(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.EvaluateWithWorkDir("hashFiles('small.txt')", nil, nil, true, tmpDir)
+		_, _ = evaluator.EvaluateWithWorkDir("hashFiles('small.txt')", nil, nil, true, tmpDir)
 	}
 }
 
@@ -193,7 +193,7 @@ func BenchmarkHashFilesMedium(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.EvaluateWithWorkDir("hashFiles('medium.txt')", nil, nil, true, tmpDir)
+		_, _ = evaluator.EvaluateWithWorkDir("hashFiles('medium.txt')", nil, nil, true, tmpDir)
 	}
 }
 
@@ -221,7 +221,7 @@ func BenchmarkHashFilesMultiple(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		evaluator.EvaluateWithWorkDir("hashFiles('*.txt')", nil, nil, true, tmpDir)
+		_, _ = evaluator.EvaluateWithWorkDir("hashFiles('*.txt')", nil, nil, true, tmpDir)
 	}
 }
 
@@ -238,7 +238,7 @@ func BenchmarkRepeatedEvaluation(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		// Simulate 10 steps with the same condition
 		for j := 0; j < 10; j++ {
-			evaluator.Evaluate(condition, env, nil, true)
+			_, _ = evaluator.Evaluate(condition, env, nil, true)
 		}
 	}
 }
@@ -252,19 +252,19 @@ func BenchmarkStringFunctionComparison(b *testing.B) {
 
 	b.Run("contains", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evaluator.Evaluate("contains(env.VAR, 'World')", env, nil, true)
+			_, _ = evaluator.Evaluate("contains(env.VAR, 'World')", env, nil, true)
 		}
 	})
 
 	b.Run("startsWith", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evaluator.Evaluate("startsWith(env.VAR, 'Hello')", env, nil, true)
+			_, _ = evaluator.Evaluate("startsWith(env.VAR, 'Hello')", env, nil, true)
 		}
 	})
 
 	b.Run("endsWith", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evaluator.Evaluate("endsWith(env.VAR, 'String')", env, nil, true)
+			_, _ = evaluator.Evaluate("endsWith(env.VAR, 'String')", env, nil, true)
 		}
 	})
 }

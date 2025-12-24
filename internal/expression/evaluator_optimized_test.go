@@ -199,13 +199,13 @@ func BenchmarkEvalContainsDirect(b *testing.B) {
 
 	b.Run("Original", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalContains(args, ctx)
+			_, _ = evalContains(args, ctx)
 		}
 	})
 
 	b.Run("Optimized", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalContainsOptimized(args, ctx)
+			_, _ = evalContainsOptimized(args, ctx)
 		}
 	})
 }
@@ -225,13 +225,13 @@ func BenchmarkEvalStartsWithDirect(b *testing.B) {
 
 	b.Run("Original", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalStartsWith(args, ctx)
+			_, _ = evalStartsWith(args, ctx)
 		}
 	})
 
 	b.Run("Optimized", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalStartsWithOptimized(args, ctx)
+			_, _ = evalStartsWithOptimized(args, ctx)
 		}
 	})
 }
@@ -251,13 +251,13 @@ func BenchmarkEvalEndsWithDirect(b *testing.B) {
 
 	b.Run("Original", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalEndsWith(args, ctx)
+			_, _ = evalEndsWith(args, ctx)
 		}
 	})
 
 	b.Run("Optimized", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalEndsWithOptimized(args, ctx)
+			_, _ = evalEndsWithOptimized(args, ctx)
 		}
 	})
 }
@@ -292,13 +292,13 @@ func BenchmarkHashFilesDirect(b *testing.B) {
 
 	b.Run("Original", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalHashFiles(args, ctx)
+			_, _ = evalHashFiles(args, ctx)
 		}
 	})
 
 	b.Run("Optimized", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalHashFilesOptimized(args, ctx)
+			_, _ = evalHashFilesOptimized(args, ctx)
 		}
 	})
 }
@@ -309,14 +309,14 @@ func BenchmarkExpressionCaching(b *testing.B) {
 
 	b.Run("WithoutCache", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			ParseExpression(expr)
+			_, _ = ParseExpression(expr)
 		}
 	})
 
 	b.Run("WithCache", func(b *testing.B) {
 		cache := NewExpressionCache()
 		for i := 0; i < b.N; i++ {
-			ParseExpressionCached(expr, cache)
+			_, _ = ParseExpressionCached(expr, cache)
 		}
 	})
 }
@@ -332,7 +332,7 @@ func BenchmarkRepeatedEvaluationWithCache(b *testing.B) {
 		evaluator := NewConditionEvaluator()
 		for i := 0; i < b.N; i++ {
 			for j := 0; j < 10; j++ {
-				evaluator.Evaluate(condition, env, nil, true)
+				_, _ = evaluator.Evaluate(condition, env, nil, true)
 			}
 		}
 	})
@@ -374,13 +374,13 @@ func BenchmarkLongStringContains(b *testing.B) {
 
 	b.Run("Original", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalContains(args, ctx)
+			_, _ = evalContains(args, ctx)
 		}
 	})
 
 	b.Run("Optimized", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			evalContainsOptimized(args, ctx)
+			_, _ = evalContainsOptimized(args, ctx)
 		}
 	})
 }
