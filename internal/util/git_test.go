@@ -168,7 +168,7 @@ func TestGitHeadSHA_ValidRepo(t *testing.T) {
 	}
 }
 
-// TestGitHeadRef_DefaultBranch tests GitHeadRef returns default branch name
+// TestGitHeadRef_DefaultBranch tests GitHeadRef returns valid ref format
 func TestGitHeadRef_DefaultBranch(t *testing.T) {
 	t.Parallel()
 	cwd, err := os.Getwd()
@@ -183,9 +183,19 @@ func TestGitHeadRef_DefaultBranch(t *testing.T) {
 		t.Fatalf("GitHeadRef() error = %v", err)
 	}
 
-	// ref may be empty in detached HEAD state, which is acceptable
-	// Just verify the function doesn't error
-	t.Logf("GitHeadRef() returned: %q (length: %d)", ref, len(ref))
+	// ref must be either:
+	// 1. Empty string (detached HEAD state)
+	// 2. A valid ref starting with "refs/" (e.g., "refs/heads/main")
+	if ref != "" {
+		if !strings.HasPrefix(ref, "refs/") {
+			t.Errorf("GitHeadRef() returned invalid ref format: %q, expected empty or refs/* prefix", ref)
+		}
+		// Verify ref contains valid path segments
+		parts := strings.Split(ref, "/")
+		if len(parts) < 3 {
+			t.Errorf("GitHeadRef() returned incomplete ref: %q, expected refs/<type>/<name>", ref)
+		}
+	}
 }
 
 // TestFindGitRoot_MultipleDirectories tests finding git root from nested directories

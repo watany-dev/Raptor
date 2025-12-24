@@ -297,6 +297,7 @@ env:
 
 	t.Run("handles malformed YAML with non-mapping jobs", func(t *testing.T) {
 		// This YAML has jobs as an array instead of a mapping
+		// GitHub Actions requires jobs to be a mapping, so this is invalid
 		yamlContent := `name: Test Workflow
 jobs:
   - job1
@@ -309,15 +310,27 @@ jobs:
 		}
 
 		wf, err := LoadWorkflowFile(workflowPath)
-		// This should not error because YAML is technically valid, but jobs won't be parsed
+
+		// Jobs as a sequence is invalid - should either:
+		// 1. Return an error during YAML decoding
+		// 2. Return empty jobs if parsing is lenient
 		if err != nil {
-			// This is acceptable if it errors
+			// Error is the expected behavior for invalid jobs format
+			// Verify error message is meaningful
+			if !strings.Contains(err.Error(), "cannot unmarshal") &&
+				!strings.Contains(err.Error(), "decode") &&
+				!strings.Contains(err.Error(), "yaml") {
+				t.Logf("Got error (may be implementation-specific): %v", err)
+			}
 			return
 		}
 
-		// If no error, JobOrder should be empty since jobs is not a mapping
+		// If no error (lenient parsing), verify jobs are not incorrectly populated
 		if len(wf.JobOrder) > 0 {
 			t.Errorf("JobOrder should be empty for non-mapping jobs, got %v", wf.JobOrder)
+		}
+		if len(wf.Jobs) > 0 {
+			t.Errorf("Jobs should be empty for non-mapping jobs, got %d jobs", len(wf.Jobs))
 		}
 	})
 
@@ -706,6 +719,7 @@ func TestExtractJobOrderFromNode_JobsNotMapping(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create YAML where jobs is a scalar instead of mapping
+	// This is invalid according to GitHub Actions schema
 	yamlContent := `name: Test
 jobs: "not a mapping"`
 	workflowPath := filepath.Join(tmpDir, "jobs_scalar.yml")
@@ -714,14 +728,23 @@ jobs: "not a mapping"`
 	}
 
 	wf, err := LoadWorkflowFile(workflowPath)
+
+	// Jobs as a scalar is invalid - should either error or return empty jobs
 	if err != nil {
-		// Error is acceptable for invalid jobs format
+		// Error is the expected behavior for invalid jobs format
+		errMsg := err.Error()
+		if errMsg == "" {
+			t.Error("expected non-empty error message for scalar jobs")
+		}
 		return
 	}
 
-	// If no error, JobOrder should be empty
+	// If no error (lenient parsing), verify jobs structures are empty
 	if len(wf.JobOrder) > 0 {
-		t.Errorf("JobOrder should be empty for non-mapping jobs, got %v", wf.JobOrder)
+		t.Errorf("JobOrder should be empty for scalar jobs, got %v", wf.JobOrder)
+	}
+	if len(wf.Jobs) > 0 {
+		t.Errorf("Jobs should be empty for scalar jobs, got %d jobs", len(wf.Jobs))
 	}
 }
 

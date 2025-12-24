@@ -441,12 +441,13 @@ func TestEvaluator_AdditionalCoverage(t *testing.T) {
 			jobSuccess: true,
 			want:       true,
 		},
-		// Unknown function test
+		// Unknown function test - in permissive mode (StrictMode=false),
+		// evaluation errors still return true to allow workflow to continue
 		{
-			name:       "unknown function returns error",
+			name:       "unknown function returns error but defaults to true in permissive mode",
 			condition:  "unknownFunc()",
 			jobSuccess: true,
-			want:       true,
+			want:       true, // permissive mode returns true even on error
 			wantErr:    true,
 		},
 		// Function with wrong number of arguments

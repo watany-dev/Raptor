@@ -215,20 +215,34 @@ echo "line3"`,
 func TestHostExecutor_Execute_CommandNotExist(t *testing.T) {
 	executor := NewHostExecutor()
 
-	// This will cause the shell to return an error
+	// This will cause the shell to return an error (command not found)
 	config := Config{
 		Command: "nonexistent_command_xyz_abc_123",
 	}
 
 	result, err := executor.Execute(config)
+
+	// Two valid outcomes:
+	// 1. Execute returns an error directly
+	// 2. Execute succeeds but returns non-zero exit code (shell handles the error)
 	if err != nil {
-		// It's ok if it errors
+		// Shell execution failed - this is acceptable for non-existent command
+		// Verify error message is meaningful
+		if err.Error() == "" {
+			t.Error("expected non-empty error message for non-existent command")
+		}
 		return
 	}
 
-	// If it doesn't error, it should have a non-zero exit code (command not found)
+	// Shell executed but command not found - should have non-zero exit code
 	if result.ExitCode == 0 {
 		t.Errorf("expected non-zero exit code for non-existent command, got %d", result.ExitCode)
+	}
+
+	// Stderr should contain some indication of the error
+	if result.Stderr == "" && result.ExitCode != 0 {
+		// Some shells may not output to stderr, but exit code should be non-zero
+		// This is acceptable
 	}
 }
 
@@ -265,15 +279,32 @@ func TestHostExecutor_Execute_EmptyCommand(t *testing.T) {
 	}
 
 	result, err := executor.Execute(config)
+
+	// Empty command behavior depends on shell implementation:
+	// 1. May return an error (invalid command)
+	// 2. May succeed with exit code 0 and empty output (shell no-op)
+	// 3. May succeed with non-zero exit code
 	if err != nil {
-		// Empty command may error, which is acceptable
+		// Error for empty command is acceptable - verify error is not nil
+		if err.Error() == "" {
+			t.Error("expected non-empty error message for empty command")
+		}
 		return
 	}
 
-	// If no error, should have empty output
-	if result.ExitCode != 0 && result.Stdout == "" {
-		// This is acceptable behavior for empty command
-		return
+	// If no error, verify the result is sensible
+	// Empty command should produce empty or minimal output
+	if result.Stdout != "" {
+		// Some shells may produce output for empty command, but it should be minimal
+		if len(result.Stdout) > 100 {
+			t.Errorf("unexpected large output for empty command: %d bytes", len(result.Stdout))
+		}
+	}
+
+	// Exit code 0 or non-zero are both acceptable for empty command
+	// Just verify we got a valid result structure
+	if result.ExitCode < 0 || result.ExitCode > 255 {
+		t.Errorf("invalid exit code for empty command: %d", result.ExitCode)
 	}
 }
 
@@ -335,14 +366,30 @@ func TestHostExecutor_Execute_CommandFailsToStart(t *testing.T) {
 	}
 
 	_, err := executor.Execute(config)
+
+	// Non-existent working directory should cause an error
 	if err == nil {
-		// If no error, check the result has proper output
-		// Some systems might handle this differently
+		t.Error("expected error for non-existent working directory, got nil")
 		return
 	}
 
-	// If there's an error, it should be because command failed to start
-	t.Logf("Execute() returned expected error: %v", err)
+	// Verify error message indicates the problem
+	errMsg := err.Error()
+	if errMsg == "" {
+		t.Error("expected non-empty error message for failed command start")
+	}
+
+	// Error should relate to the directory not existing
+	// Different systems may report this differently
+	isExpectedError := strings.Contains(errMsg, "no such file") ||
+		strings.Contains(errMsg, "not exist") ||
+		strings.Contains(errMsg, "cannot find") ||
+		strings.Contains(errMsg, "directory")
+	if !isExpectedError {
+		// Log the actual error for debugging, but don't fail
+		// as error messages vary by system
+		t.Logf("Execute() returned error (may be system-specific): %v", err)
+	}
 }
 
 // TestHostExecutor_Execute_EmptyEnv tests command execution with empty env map
