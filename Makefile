@@ -1,7 +1,7 @@
 # Raptor Makefile
 # Provides standardized build commands for development
 
-.PHONY: all build test lint fmt coverage clean check vuln help
+.PHONY: all build test lint fmt coverage clean check vuln help docs
 
 # Default target
 all: check build
@@ -57,11 +57,18 @@ clean:
 	rm -f coverage.out coverage.html
 	go clean
 
+# Generate godoc documentation server
+docs:
+	@echo "Starting godoc server at http://localhost:6060"
+	@echo "View documentation at: http://localhost:6060/pkg/github.com/watany-dev/raptor/"
+	godoc -http=:6060
+
 # Install development tools
 tools:
 	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 	go install golang.org/x/tools/cmd/goimports@latest
 	go install golang.org/x/vuln/cmd/govulncheck@latest
+	go install golang.org/x/tools/cmd/godoc@latest
 
 # Run the application
 run:
@@ -89,4 +96,5 @@ help:
 	@echo "  clean        Clean build artifacts"
 	@echo "  tools        Install development tools"
 	@echo "  run          Run the application (use ARGS= for arguments)"
+	@echo "  docs         Start godoc server for documentation"
 	@echo "  help         Show this help"
