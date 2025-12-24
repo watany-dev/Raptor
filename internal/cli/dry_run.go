@@ -89,6 +89,15 @@ func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) *RunResul
 // formatStep formats a single step's dry-run preview.
 func (drf *DryRunFormatter) formatStep(index int, stepName string, step *workflow.Step) {
 	_, _ = fmt.Fprintf(drf.stdout, "   [%d] %s\n", index+1, stepName)
+
+	// Show warning for unsupported GitHub Actions
+	if step.IsAction() {
+		_, _ = fmt.Fprintf(drf.stdout, "       ⚠️  Uses: %s (not supported, will be skipped)\n", step.Uses)
+		if len(step.With) > 0 {
+			_, _ = fmt.Fprintf(drf.stdout, "       With: %d parameter(s)\n", len(step.With))
+		}
+	}
+
 	if step.WorkingDirectory != "" {
 		_, _ = fmt.Fprintf(drf.stdout, "       Working directory: %s\n", step.WorkingDirectory)
 	}

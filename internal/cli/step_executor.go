@@ -104,12 +104,38 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 		return se.handleSkippedStep(step, index, stepName, ctx)
 	}
 
+	// Check if step uses GitHub Actions (uses: field)
+	if step.IsAction() {
+		return se.handleUnsupportedAction(step, index, stepName, ctx)
+	}
+
 	return se.executeStep(step, index, stepName, stepEnv, ctx)
 }
 
 // handleSkippedStep handles a step that should be skipped due to condition evaluation.
 func (se *StepExecutor) handleSkippedStep(step *workflow.Step, index int, stepName string, ctx *ExecutionContext) (*StepResult, error) {
 	_, _ = fmt.Fprintf(se.stdout, "Skipping step (condition evaluated to false)\n")
+	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
+
+	stepResult := &StepResult{
+		StepIndex: index,
+		StepName:  stepName,
+		StepID:    step.ID,
+		ExitCode:  0,
+		Skipped:   true,
+		Outcome:   "skipped",
+	}
+
+	ctx.updateStepContext(step.ID, "skipped")
+	return stepResult, nil
+}
+
+// handleUnsupportedAction handles a step that uses GitHub Actions (uses: field).
+// GitHub Actions are not supported by Raptor, so we skip with an explicit message.
+func (se *StepExecutor) handleUnsupportedAction(step *workflow.Step, index int, stepName string, ctx *ExecutionContext) (*StepResult, error) {
+	_, _ = fmt.Fprintf(se.stdout, "⚠️  Skipping step: GitHub Actions (uses:) not supported\n")
+	_, _ = fmt.Fprintf(se.stdout, "    Action: %s\n", step.Uses)
+	_, _ = fmt.Fprintf(se.stdout, "    Raptor only supports 'run:' steps. See: https://github.com/watany-dev/raptor#supported-features\n")
 	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 
 	stepResult := &StepResult{

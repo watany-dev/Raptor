@@ -831,3 +831,169 @@ func TestStepExecutor_updateEnvironmentFromFiles_PathFileScannerError(t *testing
 		t.Error("updateEnvironmentFromFiles() expected error for scanner buffer overflow")
 	}
 }
+
+// TestStepExecutor_handleUnsupportedAction tests the handleUnsupportedAction method
+func TestStepExecutor_handleUnsupportedAction(t *testing.T) {
+	t.Run("skips step with uses and outputs warning message", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+		mock := newMockExecutor()
+		evaluator := expression.NewConditionEvaluator()
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+		ctx := NewExecutionContext(map[string]string{})
+
+		step := &workflow.Step{
+			ID:   "checkout-step",
+			Name: "Checkout",
+			Uses: "actions/checkout@v4",
+		}
+
+		result, err := se.handleUnsupportedAction(step, 0, "Checkout", ctx)
+		if err != nil {
+			t.Fatalf("handleUnsupportedAction() error = %v", err)
+		}
+
+		if !result.Skipped {
+			t.Error("Result should be marked as skipped")
+		}
+
+		if result.Outcome != "skipped" {
+			t.Errorf("Outcome = %q, want %q", result.Outcome, "skipped")
+		}
+
+		// Check steps context was updated
+		stepCtx, exists := ctx.StepsContext["checkout-step"]
+		if !exists {
+			t.Fatal("Steps context should contain checkout-step")
+		}
+
+		if stepCtx.Outcome != "skipped" {
+			t.Errorf("StepContext.Outcome = %q, want %q", stepCtx.Outcome, "skipped")
+		}
+
+		// Check output contains warning message
+		output := stdout.String()
+		if !bytes.Contains([]byte(output), []byte("Skipping step")) {
+			t.Error("Output should contain 'Skipping step'")
+		}
+		if !bytes.Contains([]byte(output), []byte("GitHub Actions")) {
+			t.Error("Output should mention 'GitHub Actions'")
+		}
+		if !bytes.Contains([]byte(output), []byte("actions/checkout@v4")) {
+			t.Error("Output should contain the action name")
+		}
+	})
+
+	t.Run("handles step without ID", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+		mock := newMockExecutor()
+		evaluator := expression.NewConditionEvaluator()
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+		ctx := NewExecutionContext(map[string]string{})
+
+		step := &workflow.Step{
+			Name: "Setup Go",
+			Uses: "actions/setup-go@v5",
+		}
+
+		result, err := se.handleUnsupportedAction(step, 0, "Setup Go", ctx)
+		if err != nil {
+			t.Fatalf("handleUnsupportedAction() error = %v", err)
+		}
+
+		if !result.Skipped {
+			t.Error("Result should be marked as skipped")
+		}
+
+		// Steps context should not be updated for step without ID
+		if len(ctx.StepsContext) != 0 {
+			t.Errorf("Steps context should be empty, got %d entries", len(ctx.StepsContext))
+		}
+	})
+}
+
+// TestStepExecutor_Execute_UsesStep tests that Execute correctly skips steps with uses
+func TestStepExecutor_Execute_UsesStep(t *testing.T) {
+	t.Run("skips step with uses field", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+		mock := newMockExecutor(executor.Result{ExitCode: 0, Stdout: "should not run\n"})
+		evaluator := expression.NewConditionEvaluator()
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+		ctx := NewExecutionContext(map[string]string{})
+
+		step := &workflow.Step{
+			Name: "Checkout",
+			Uses: "actions/checkout@v4",
+		}
+
+		result, err := se.Execute(step, 0, ctx)
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+
+		if !result.Skipped {
+			t.Error("Step with uses should be skipped")
+		}
+
+		// Executor should not have been called
+		if len(mock.calls) != 0 {
+			t.Errorf("Executor should not be called for uses step, got %d calls", len(mock.calls))
+		}
+	})
+
+	t.Run("skips step with uses and with fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+		mock := newMockExecutor()
+		evaluator := expression.NewConditionEvaluator()
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+		ctx := NewExecutionContext(map[string]string{})
+
+		step := &workflow.Step{
+			Name: "Setup Go",
+			Uses: "actions/setup-go@v5",
+			With: map[string]string{
+				"go-version": "1.21",
+			},
+		}
+
+		result, err := se.Execute(step, 0, ctx)
+		if err != nil {
+			t.Fatalf("Execute() error = %v", err)
+		}
+
+		if !result.Skipped {
+			t.Error("Step with uses should be skipped")
+		}
+	})
+}

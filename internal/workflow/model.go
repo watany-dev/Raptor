@@ -35,8 +35,20 @@ type Step struct {
 	If string `yaml:"if"`
 	// Run contains the shell command to execute.
 	Run string `yaml:"run"`
+	// Uses specifies a GitHub Action to use.
+	// NOTE: This field is parsed but not executed. Steps with uses will be skipped
+	// with an explicit message. This provides better UX than silently ignoring.
+	Uses string `yaml:"uses"`
+	// With contains input parameters for the action specified in Uses.
+	// NOTE: This field is parsed but not executed (see Uses note above).
+	With map[string]string `yaml:"with"`
 	// Env contains environment variables for this step.
 	Env map[string]string `yaml:"env"`
 	// WorkingDirectory specifies the working directory for run commands.
 	WorkingDirectory string `yaml:"working-directory"`
+}
+
+// IsAction returns true if this step uses a GitHub Action (has uses: field).
+func (s *Step) IsAction() bool {
+	return s.Uses != ""
 }
