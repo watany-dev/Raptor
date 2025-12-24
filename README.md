@@ -23,8 +23,8 @@ Download the binary for your platform from the [releases page](https://github.co
 #### Linux (x86_64)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Linux_x86_64.tar.gz
-tar xzf raptor_0.1.2_Linux_x86_64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.2.0/raptor_0.2.0_Linux_x86_64.tar.gz
+tar xzf raptor_0.2.0_Linux_x86_64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
@@ -32,8 +32,8 @@ raptor --version
 #### Linux (ARM64)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Linux_arm64.tar.gz
-tar xzf raptor_0.1.2_Linux_arm64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.2.0/raptor_0.2.0_Linux_arm64.tar.gz
+tar xzf raptor_0.2.0_Linux_arm64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
@@ -41,8 +41,8 @@ raptor --version
 #### macOS (Apple Silicon)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Darwin_arm64.tar.gz
-tar xzf raptor_0.1.2_Darwin_arm64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.2.0/raptor_0.2.0_Darwin_arm64.tar.gz
+tar xzf raptor_0.2.0_Darwin_arm64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
@@ -50,22 +50,22 @@ raptor --version
 #### macOS (Intel)
 
 ```bash
-curl -LO https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Darwin_x86_64.tar.gz
-tar xzf raptor_0.1.2_Darwin_x86_64.tar.gz
+curl -LO https://github.com/watany-dev/raptor/releases/download/v0.2.0/raptor_0.2.0_Darwin_x86_64.tar.gz
+tar xzf raptor_0.2.0_Darwin_x86_64.tar.gz
 sudo mv raptor /usr/local/bin/
 raptor --version
 ```
 
 #### Windows (x86_64)
 
-1. Download [raptor_0.1.2_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.1.2/raptor_0.1.2_Windows_x86_64.zip)
+1. Download [raptor_0.2.0_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.2.0/raptor_0.2.0_Windows_x86_64.zip)
 2. Extract the ZIP file
 3. Place `raptor.exe` in a directory in your PATH
 
 ### Go install
 
 ```bash
-go install github.com/watany-dev/raptor/cmd/raptor@v0.1.2
+go install github.com/watany-dev/raptor/cmd/raptor@v0.2.0
 ```
 
 ### Build from Source
