@@ -180,6 +180,7 @@ func TestFprintHelp(t *testing.T) {
 		"--job",
 		"--workdir",
 		"--dry-run",
+		"--ignore-if-errors",
 		"Examples:",
 		"Security:",
 	}
@@ -250,6 +251,38 @@ func TestParseRunFlags_FlagParseError(t *testing.T) {
 			_, err := ParseRunFlags(tt.args)
 			if err == nil {
 				t.Error("ParseRunFlags() expected error for invalid flag")
+			}
+		})
+	}
+}
+
+// TestParseRunFlags_IgnoreIfErrors tests the --ignore-if-errors flag
+func TestParseRunFlags_IgnoreIfErrors(t *testing.T) {
+	tests := []struct {
+		name              string
+		args              []string
+		wantIgnoreIfErrors bool
+	}{
+		{
+			name:              "with --ignore-if-errors",
+			args:              []string{"--workflow", "ci.yml", "--ignore-if-errors"},
+			wantIgnoreIfErrors: true,
+		},
+		{
+			name:              "without --ignore-if-errors",
+			args:              []string{"-w", "ci.yml"},
+			wantIgnoreIfErrors: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opts, err := ParseRunFlags(tt.args)
+			if err != nil {
+				t.Fatalf("ParseRunFlags() error = %v", err)
+			}
+			if opts.IgnoreIfErrors != tt.wantIgnoreIfErrors {
+				t.Errorf("IgnoreIfErrors = %v, want %v", opts.IgnoreIfErrors, tt.wantIgnoreIfErrors)
 			}
 		})
 	}

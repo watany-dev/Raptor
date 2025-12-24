@@ -73,6 +73,9 @@ type runContext struct {
 func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 	ctx := context.Background()
 
+	// Configure evaluator based on flags
+	r.evaluator.StrictMode = !opts.IgnoreIfErrors
+
 	// Load the workflow file
 	wf, err := workflow.LoadWorkflowFile(opts.Workflow)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 
 func TestConditionEvaluator_Evaluate(t *testing.T) {
 	evaluator := NewConditionEvaluator()
+	evaluator.StrictMode = false // Test permissive mode for backward compatibility
 
 	tests := []struct {
 		name         string
@@ -405,6 +406,7 @@ func TestHashFiles(t *testing.T) {
 
 func TestEvaluator_AdditionalCoverage(t *testing.T) {
 	evaluator := NewConditionEvaluator()
+	evaluator.StrictMode = false // Test permissive mode
 
 	tests := []struct {
 		name         string
@@ -631,6 +633,7 @@ func TestHashFilesEdgeCases(t *testing.T) {
 
 func TestErrorPropagation(t *testing.T) {
 	evaluator := NewConditionEvaluator()
+	evaluator.StrictMode = false // Test permissive mode
 
 	tests := []struct {
 		name      string
@@ -660,6 +663,75 @@ func TestErrorPropagation(t *testing.T) {
 			_, err := evaluator.Evaluate(tt.condition, nil, nil, true)
 			if err == nil {
 				t.Errorf("expected error for %q", tt.condition)
+			}
+		})
+	}
+}
+
+func TestStrictMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		strictMode bool
+		condition  string
+		wantResult bool
+		wantErr    bool
+	}{
+		{
+			name:       "strict mode - parse error returns false with error",
+			strictMode: true,
+			condition:  "@invalid",
+			wantResult: false,
+			wantErr:    true,
+		},
+		{
+			name:       "permissive mode - parse error returns true with error",
+			strictMode: false,
+			condition:  "@invalid",
+			wantResult: true,
+			wantErr:    true,
+		},
+		{
+			name:       "strict mode - unknown function returns false with error",
+			strictMode: true,
+			condition:  "unknownFunc()",
+			wantResult: false,
+			wantErr:    true,
+		},
+		{
+			name:       "permissive mode - unknown function returns true with error",
+			strictMode: false,
+			condition:  "unknownFunc()",
+			wantResult: true,
+			wantErr:    true,
+		},
+		{
+			name:       "strict mode - valid condition works normally",
+			strictMode: true,
+			condition:  "true",
+			wantResult: true,
+			wantErr:    false,
+		},
+		{
+			name:       "permissive mode - valid condition works normally",
+			strictMode: false,
+			condition:  "true",
+			wantResult: true,
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			evaluator := NewConditionEvaluator()
+			evaluator.StrictMode = tt.strictMode
+
+			got, err := evaluator.Evaluate(tt.condition, nil, nil, true)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Evaluate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.wantResult {
+				t.Errorf("Evaluate() = %v, want %v", got, tt.wantResult)
 			}
 		})
 	}
