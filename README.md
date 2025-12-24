@@ -102,6 +102,7 @@ raptor run --workflow <workflow-file>
 | `--job` | `-j` | Job ID to run (runs all jobs if omitted) |
 | `--workdir` | `-C` | Working directory (default: current directory) |
 | `--dry-run` | `-n` | Preview without actually executing |
+| `--ignore-if-errors` | | Ignore condition evaluation errors (legacy mode) |
 
 **Note**: All workflows are executed in isolated Git worktrees for security.
 
@@ -252,6 +253,20 @@ steps:
 | `startsWith(search, prefix)` | Check if string starts with prefix |
 | `endsWith(search, suffix)` | Check if string ends with suffix |
 | `hashFiles(pattern, ...)` | Calculate SHA-256 hash of files matching patterns |
+
+**Error Handling:**
+
+By default, Raptor uses strict mode for condition evaluation. If a condition has syntax errors or evaluation errors, the workflow will stop with a clear error message. This helps catch typos and invalid expressions early.
+
+```bash
+# Default behavior: strict mode
+raptor run -w workflow.yml
+# Error: failed to evaluate if condition: condition parse error: unexpected token
+
+# Legacy behavior: ignore errors and continue
+raptor run -w workflow.yml --ignore-if-errors
+# Warning: failed to evaluate if condition: parse error: ... (defaulting to true)
+```
 
 ### Sample Workflow
 
