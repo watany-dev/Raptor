@@ -1,6 +1,7 @@
 package expression
 
 import (
+	"os"
 	"testing"
 )
 
@@ -364,19 +365,26 @@ func TestNewConditionEvaluator(t *testing.T) {
 func TestHashFiles(t *testing.T) {
 	evaluator := NewConditionEvaluator()
 
-	// Test with existing file (go.mod should exist)
+	// Create a temporary directory with a test file
+	tmpDir := t.TempDir()
+	testFile := tmpDir + "/test.txt"
+	if err := os.WriteFile(testFile, []byte("test content"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+
+	// Test with existing file
 	result, err := evaluator.EvaluateWithWorkDir(
-		"hashFiles('go.mod') != ''",
+		"hashFiles('test.txt') != ''",
 		nil,
 		nil,
 		true,
-		"/home/user/Raptor",
+		tmpDir,
 	)
 	if err != nil {
 		t.Errorf("hashFiles() unexpected error: %v", err)
 	}
 	if !result {
-		t.Error("hashFiles('go.mod') should return non-empty hash")
+		t.Error("hashFiles('test.txt') should return non-empty hash")
 	}
 
 	// Test with non-existing file
@@ -385,7 +393,7 @@ func TestHashFiles(t *testing.T) {
 		nil,
 		nil,
 		true,
-		"/home/user/Raptor",
+		tmpDir,
 	)
 	if err != nil {
 		t.Errorf("hashFiles() unexpected error: %v", err)
