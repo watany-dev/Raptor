@@ -259,18 +259,18 @@ func TestParseRunFlags_FlagParseError(t *testing.T) {
 // TestParseRunFlags_IgnoreIfErrors tests the --ignore-if-errors flag
 func TestParseRunFlags_IgnoreIfErrors(t *testing.T) {
 	tests := []struct {
-		name              string
-		args              []string
+		name               string
+		args               []string
 		wantIgnoreIfErrors bool
 	}{
 		{
-			name:              "with --ignore-if-errors",
-			args:              []string{"--workflow", "ci.yml", "--ignore-if-errors"},
+			name:               "with --ignore-if-errors",
+			args:               []string{"--workflow", "ci.yml", "--ignore-if-errors"},
 			wantIgnoreIfErrors: true,
 		},
 		{
-			name:              "without --ignore-if-errors",
-			args:              []string{"-w", "ci.yml"},
+			name:               "without --ignore-if-errors",
+			args:               []string{"-w", "ci.yml"},
 			wantIgnoreIfErrors: false,
 		},
 	}

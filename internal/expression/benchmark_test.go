@@ -65,10 +65,10 @@ func BenchmarkEvalContainsLongString(b *testing.B) {
 func BenchmarkEvalComplexCondition(b *testing.B) {
 	evaluator := NewConditionEvaluator()
 	env := map[string]string{
-		"GITHUB_REF":     "refs/heads/main",
-		"GITHUB_ACTOR":   "developer",
-		"RUNNER_OS":      "Linux",
-		"GITHUB_EVENT":   "push",
+		"GITHUB_REF":   "refs/heads/main",
+		"GITHUB_ACTOR": "developer",
+		"RUNNER_OS":    "Linux",
+		"GITHUB_EVENT": "push",
 	}
 
 	b.ResetTimer()

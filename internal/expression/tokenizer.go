@@ -9,19 +9,19 @@ import (
 type TokenType int
 
 const (
-	TOKEN_EOF TokenType = iota
-	TOKEN_AND           // &&
-	TOKEN_OR            // ||
-	TOKEN_NOT           // !
-	TOKEN_LPAREN        // (
-	TOKEN_RPAREN        // )
-	TOKEN_EQ            // ==
-	TOKEN_NE            // !=
-	TOKEN_STRING        // 'value'
-	TOKEN_IDENT         // env.VAR, steps.id.outcome, function names
-	TOKEN_COMMA         // ,
-	TOKEN_TRUE          // true
-	TOKEN_FALSE         // false
+	TOKEN_EOF    TokenType = iota
+	TOKEN_AND              // &&
+	TOKEN_OR               // ||
+	TOKEN_NOT              // !
+	TOKEN_LPAREN           // (
+	TOKEN_RPAREN           // )
+	TOKEN_EQ               // ==
+	TOKEN_NE               // !=
+	TOKEN_STRING           // 'value'
+	TOKEN_IDENT            // env.VAR, steps.id.outcome, function names
+	TOKEN_COMMA            // ,
+	TOKEN_TRUE             // true
+	TOKEN_FALSE            // false
 )
 
 // String returns a string representation of the token type.
