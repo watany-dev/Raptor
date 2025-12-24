@@ -150,12 +150,188 @@ func TestConditionEvaluator_Evaluate(t *testing.T) {
 			want:       true,
 		},
 		{
-			name:       "unsupported condition syntax",
+			name:       "identifier resolves to truthy value",
 			condition:  "some.unsupported.syntax",
 			env:        nil,
 			jobSuccess: true,
 			want:       true,
+			wantErr:    false,
+		},
+		{
+			name:       "parse error returns true with error",
+			condition:  "@invalid",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
 			wantErr:    true,
+		},
+		// Logical operators tests
+		{
+			name:       "AND operator - both true",
+			condition:  "success() && true",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "AND operator - left false",
+			condition:  "success() && true",
+			env:        nil,
+			jobSuccess: false,
+			want:       false,
+		},
+		{
+			name:       "AND operator - right false",
+			condition:  "success() && failure()",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+		},
+		{
+			name:       "OR operator - both true",
+			condition:  "success() || true",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "OR operator - left true",
+			condition:  "success() || failure()",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "OR operator - right true",
+			condition:  "failure() || true",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "OR operator - both false",
+			condition:  "failure() || false",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+		},
+		{
+			name:       "NOT operator - negate true",
+			condition:  "!failure()",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "NOT operator - negate false",
+			condition:  "!success()",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+		},
+		{
+			name:       "complex expression with AND and NOT",
+			condition:  "success() && !failure()",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "grouped expression",
+			condition:  "(success() || failure()) && true",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "mixed operators with env",
+			condition:  "success() && env.MY_VAR == 'prod'",
+			env:        map[string]string{"MY_VAR": "prod"},
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "mixed operators with env - no match",
+			condition:  "success() && env.MY_VAR == 'prod'",
+			env:        map[string]string{"MY_VAR": "dev"},
+			jobSuccess: true,
+			want:       false,
+		},
+		// contains() function tests
+		{
+			name:       "contains - match",
+			condition:  "contains('Hello World', 'world')",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "contains - no match",
+			condition:  "contains('Hello', 'xyz')",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+		},
+		{
+			name:       "contains with env variable",
+			condition:  "contains(env.MESSAGE, 'deploy')",
+			env:        map[string]string{"MESSAGE": "please deploy now"},
+			jobSuccess: true,
+			want:       true,
+		},
+		// startsWith() function tests
+		{
+			name:       "startsWith - match",
+			condition:  "startsWith('refs/tags/v1', 'refs/tags/')",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "startsWith - case insensitive match",
+			condition:  "startsWith('Hello', 'he')",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "startsWith - no match",
+			condition:  "startsWith('Hello', 'World')",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+		},
+		// endsWith() function tests
+		{
+			name:       "endsWith - match",
+			condition:  "endsWith('hello.txt', '.txt')",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+		},
+		{
+			name:       "endsWith - no match",
+			condition:  "endsWith('hello.txt', '.md')",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+		},
+		// Short-circuit evaluation tests
+		{
+			name:       "short-circuit AND - left false",
+			condition:  "false && unknown_func()",
+			env:        nil,
+			jobSuccess: true,
+			want:       false,
+			wantErr:    false, // Should not error due to short-circuit
+		},
+		{
+			name:       "short-circuit OR - left true",
+			condition:  "true || unknown_func()",
+			env:        nil,
+			jobSuccess: true,
+			want:       true,
+			wantErr:    false, // Should not error due to short-circuit
 		},
 	}
 
@@ -183,13 +359,38 @@ func TestNewConditionEvaluator(t *testing.T) {
 	if evaluator == nil {
 		t.Fatal("NewConditionEvaluator() returned nil")
 	}
-	if evaluator.envCompareRegex == nil {
-		t.Error("envCompareRegex is nil")
+}
+
+func TestHashFiles(t *testing.T) {
+	evaluator := NewConditionEvaluator()
+
+	// Test with existing file (go.mod should exist)
+	result, err := evaluator.EvaluateWithWorkDir(
+		"hashFiles('go.mod') != ''",
+		nil,
+		nil,
+		true,
+		"/home/user/Raptor",
+	)
+	if err != nil {
+		t.Errorf("hashFiles() unexpected error: %v", err)
 	}
-	if evaluator.envNotEqualRegex == nil {
-		t.Error("envNotEqualRegex is nil")
+	if !result {
+		t.Error("hashFiles('go.mod') should return non-empty hash")
 	}
-	if evaluator.stepsOutcomeRegex == nil {
-		t.Error("stepsOutcomeRegex is nil")
+
+	// Test with non-existing file
+	result, err = evaluator.EvaluateWithWorkDir(
+		"hashFiles('nonexistent.file') != ''",
+		nil,
+		nil,
+		true,
+		"/home/user/Raptor",
+	)
+	if err != nil {
+		t.Errorf("hashFiles() unexpected error: %v", err)
+	}
+	if result {
+		t.Error("hashFiles('nonexistent.file') should return empty string")
 	}
 }
