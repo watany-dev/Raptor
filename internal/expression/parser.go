@@ -24,15 +24,14 @@ func NewParser(input string) *Parser {
 }
 
 // nextToken advances to the next token.
-func (p *Parser) nextToken() error {
+func (p *Parser) nextToken() {
 	p.curToken = p.peekToken
 	tok, err := p.tokenizer.NextToken()
 	if err != nil {
 		p.errors = append(p.errors, err.Error())
-		return err
+		return
 	}
 	p.peekToken = tok
-	return nil
 }
 
 // Parse parses the input and returns the root node of the AST.
