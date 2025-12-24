@@ -9,11 +9,11 @@ import (
 
 // RunOptions contains the options for the run command.
 type RunOptions struct {
-	Workflow        string // Path to the workflow file
-	Job             string // Job ID to run (if omitted, runs all jobs)
-	WorkingDir      string // Working directory for execution
-	DryRun          bool   // Show what would be executed without running
-	IgnoreIfErrors  bool   // Ignore condition evaluation errors and run steps (legacy behavior)
+	Workflow       string // Path to the workflow file
+	Job            string // Job ID to run (if omitted, runs all jobs)
+	WorkingDir     string // Working directory for execution
+	DryRun         bool   // Show what would be executed without running
+	IgnoreIfErrors bool   // Ignore condition evaluation errors and run steps (legacy behavior)
 }
 
 // ParseRunFlags parses command-line flags for the run command.
