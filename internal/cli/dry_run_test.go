@@ -391,4 +391,75 @@ func TestDryRunFormatter_formatStep(t *testing.T) {
 			t.Error("step index should be 1-based (5 for index 4)")
 		}
 	})
+
+	t.Run("formats step with uses field", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		formatter := NewDryRunFormatter(buf)
+
+		step := &workflow.Step{
+			Uses: "actions/checkout@v4",
+		}
+
+		formatter.formatStep(0, "Checkout", step)
+
+		output := buf.String()
+		if !strings.Contains(output, "[1] Checkout") {
+			t.Error("output should contain step number and name")
+		}
+		if !strings.Contains(output, "Uses: actions/checkout@v4") {
+			t.Error("output should contain uses field")
+		}
+		if !strings.Contains(output, "not supported") {
+			t.Error("output should indicate that uses is not supported")
+		}
+		if !strings.Contains(output, "will be skipped") {
+			t.Error("output should indicate step will be skipped")
+		}
+	})
+
+	t.Run("formats step with uses and with fields", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		formatter := NewDryRunFormatter(buf)
+
+		step := &workflow.Step{
+			Uses: "actions/setup-go@v5",
+			With: map[string]string{
+				"go-version": "1.21",
+				"cache":      "true",
+			},
+		}
+
+		formatter.formatStep(0, "Setup Go", step)
+
+		output := buf.String()
+		if !strings.Contains(output, "Uses: actions/setup-go@v5") {
+			t.Error("output should contain uses field")
+		}
+		if !strings.Contains(output, "With: 2 parameter(s)") {
+			t.Error("output should show with parameter count")
+		}
+	})
+
+	t.Run("formats step with uses and run (both fields)", func(t *testing.T) {
+		buf := &bytes.Buffer{}
+		formatter := NewDryRunFormatter(buf)
+
+		step := &workflow.Step{
+			Uses: "actions/setup-go@v5",
+			Run:  "go test ./...",
+		}
+
+		formatter.formatStep(0, "Setup and Test", step)
+
+		output := buf.String()
+		if !strings.Contains(output, "Uses: actions/setup-go@v5") {
+			t.Error("output should contain uses field")
+		}
+		if !strings.Contains(output, "Command:") {
+			t.Error("output should also show command")
+		}
+		if !strings.Contains(output, "go test") {
+			t.Error("output should contain run command")
+		}
+	})
 }

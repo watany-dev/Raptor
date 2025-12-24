@@ -11,6 +11,72 @@ import (
 )
 
 func TestLoadWorkflowFile(t *testing.T) {
+	t.Run("loads YAML with uses and with fields", func(t *testing.T) {
+		yamlContent := `name: Test Workflow
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+      - name: Run tests
+        run: go test ./...
+`
+		tmpDir := t.TempDir()
+		workflowPath := filepath.Join(tmpDir, "uses_test.yml")
+		if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write test file: %v", err)
+		}
+
+		wf, err := LoadWorkflowFile(workflowPath)
+		if err != nil {
+			t.Fatalf("LoadWorkflowFile() error = %v", err)
+		}
+
+		job := wf.Jobs["build"]
+		if len(job.Steps) != 3 {
+			t.Fatalf("len(Steps) = %d, want 3", len(job.Steps))
+		}
+
+		// Check step with uses only
+		step0 := job.Steps[0]
+		if step0.Uses != "actions/checkout@v4" {
+			t.Errorf("step0.Uses = %q, want %q", step0.Uses, "actions/checkout@v4")
+		}
+		if !step0.IsAction() {
+			t.Error("step0.IsAction() should return true")
+		}
+
+		// Check step with uses and with
+		step1 := job.Steps[1]
+		if step1.Uses != "actions/setup-go@v5" {
+			t.Errorf("step1.Uses = %q, want %q", step1.Uses, "actions/setup-go@v5")
+		}
+		if step1.With["go-version"] != "1.21" {
+			t.Errorf("step1.With[go-version] = %q, want %q", step1.With["go-version"], "1.21")
+		}
+		if step1.With["cache"] != "true" {
+			t.Errorf("step1.With[cache] = %q, want %q", step1.With["cache"], "true")
+		}
+
+		// Check step with run only
+		step2 := job.Steps[2]
+		if step2.Uses != "" {
+			t.Errorf("step2.Uses = %q, want empty", step2.Uses)
+		}
+		if step2.IsAction() {
+			t.Error("step2.IsAction() should return false")
+		}
+		if step2.Run != "go test ./..." {
+			t.Errorf("step2.Run = %q, want %q", step2.Run, "go test ./...")
+		}
+	})
+
 	t.Run("loads valid YAML with name, env, and jobs", func(t *testing.T) {
 		yamlContent := `name: Test Workflow
 env:
