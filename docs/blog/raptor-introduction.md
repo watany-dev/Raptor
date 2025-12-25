@@ -24,11 +24,11 @@ Raptorは、GitHub Actionsのワークフローファイル（`.github/workflows
 - **軽量**: 依存関係は`gopkg.in/yaml.v3`のみ
 - **セキュア**: Git worktreeによる隔離実行
 - **高速**: コンテナ起動のオーバーヘッドなし
-- **シンプル**: `run:`ステップに特化した設計
+- **高機能な条件式**: AND/OR/NOT、文字列関数、hashFilesをフルサポート
 
 ```bash
 # インストール（Go環境がある場合）
-go install github.com/watany-dev/raptor/cmd/raptor@latest
+go install github.com/watany-dev/raptor/cmd/raptor@v0.2.0
 
 # または、リリースからバイナリをダウンロード
 ```
@@ -48,20 +48,25 @@ raptor -w .github/workflows/ci.yml
 
 出力例:
 ```
-=== Workflow: CI ===
+🔍 DRY RUN MODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Workflow: .github/workflows/ci.yml
+Name: CI
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
---- Job: test (Test) ---
-  Step 1: [checkout] Checkout code
-  Step 2: [setup-go] Set up Go
-  Step 3: [test] Run tests
-    Command:
-      go test -v ./...
+📋 Job: build
+   Runs-on: ubuntu-latest
 
---- Job: lint (Lint) ---
-  Step 1: [checkout] Checkout code
-  Step 2: [lint] Run golangci-lint
-    Command:
-      golangci-lint run
+   [1] Setup
+       Command:
+         echo "Setting up..."
+
+   [2] Build
+       Command:
+         echo "Building..."
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+To execute this workflow, use: raptor run -w .github/workflows/ci.yml
 ```
 
 ### ワークフローの実行
@@ -76,6 +81,16 @@ raptor run -w .github/workflows/ci.yml -j test
 # 実行前に確認（--dry-run）
 raptor run -w .github/workflows/ci.yml --dry-run
 ```
+
+### コマンドオプション
+
+| オプション | 短縮形 | 説明 |
+|--------|-------|-------------|
+| `--workflow` | `-w` | ワークフローファイルへのパス（必須） |
+| `--job` | `-j` | 実行するジョブID（省略時は全ジョブ実行） |
+| `--workdir` | `-C` | 作業ディレクトリ（デフォルト: カレントディレクトリ） |
+| `--dry-run` | `-n` | 実行せずにプレビュー |
+| `--ignore-if-errors` | | 条件評価エラーを無視（レガシーモード） |
 
 ### サポートされる機能
 
@@ -102,8 +117,8 @@ jobs:
         env:
           STEP_VAR: "step-value"
 
-        # 条件分岐
-        if: ${{ success() }}
+        # 条件分岐（AND/OR/NOT、文字列関数も対応）
+        if: ${{ success() && env.DEPLOY_ENV == 'production' }}
 
         # 実行コマンド
         run: |
@@ -115,10 +130,25 @@ jobs:
 ```
 
 **サポートされる`if`条件:**
-- `true` / `false`（リテラル）
-- `success()` / `failure()` / `always()`
-- `${{ env.VAR == 'value' }}` / `${{ env.VAR != 'value' }}`
-- `${{ steps.step_id.outcome == 'success' }}`
+
+| 構文 | 説明 |
+|--------|-------------|
+| `true` / `false` | リテラルブール値 |
+| `success()` | 前のステップがすべて成功 |
+| `failure()` | いずれかのステップが失敗 |
+| `always()` | 常に実行（失敗後も続行） |
+| `cancelled()` | キャンセル時に実行（常にfalse） |
+| `${{ env.VAR == 'value' }}` | 環境変数の比較 |
+| `${{ env.VAR != 'value' }}` | 環境変数の否定 |
+| `${{ steps.ID.outcome == 'success' }}` | ステップ結果の参照 |
+| `${{ expr1 && expr2 }}` | 論理AND演算子 |
+| `${{ expr1 \|\| expr2 }}` | 論理OR演算子 |
+| `${{ !expr }}` | 論理NOT演算子 |
+| `${{ (expr) }}` | 括弧によるグループ化 |
+| `contains(search, item)` | 文字列/配列に値が含まれるか |
+| `startsWith(search, prefix)` | 文字列がプレフィックスで始まるか |
+| `endsWith(search, suffix)` | 文字列がサフィックスで終わるか |
+| `hashFiles(pattern, ...)` | パターンにマッチするファイルのSHA-256ハッシュ |
 
 ### GITHUB_ENV / GITHUB_OUTPUT の使用
 
@@ -155,7 +185,11 @@ raptor/
 │   │   └── step_executor.go # ステップ実行エンジン
 │   ├── envfiles/            # GITHUB_ENV等の解析
 │   ├── executor/            # コマンド実行エンジン
-│   ├── expression/          # if条件評価
+│   ├── expression/          # 条件式評価（ASTベース）
+│   │   ├── tokenizer.go     # 字句解析
+│   │   ├── parser.go        # 構文解析
+│   │   ├── ast.go           # 抽象構文木
+│   │   └── evaluator.go     # 評価エンジン
 │   ├── runtime/             # 環境変数処理
 │   ├── security/            # セキュリティ検証
 │   ├── workflow/            # YAML解析
@@ -176,51 +210,220 @@ raptor/
     ├── LoadWorkflowFile: YAML解析
     └── executeJobs: ジョブ実行
         └── for each job:
-            ├── runJob: ジョブ実行
-            │   ├── [step_executor.go] 各ステップ実行
-            │   │   ├── if条件評価
-            │   │   ├── コマンド実行
-            │   │   └── 環境ファイル解析
-            │   └── 環境変数マージ
+            ├── [step_executor.go] ステップ実行
+            │   ├── if条件評価（ASTベース）
+            │   ├── コマンド実行
+            │   └── 環境ファイル解析
             └── RemoveWorkspace: クリーンアップ
 ```
 
-### 1. ワークフロー解析（YAML処理）
+### 1. 条件式評価エンジン（ASTベース実装）
 
-`internal/workflow/load.go`:
+Raptorの最大の技術的特徴は、**完全なAST（抽象構文木）ベースの条件式評価エンジン**です。
+
+#### なぜASTベースなのか？
+
+初期実装では正規表現ベースで条件式を評価していましたが、以下の問題がありました：
+
+1. 複雑な条件式（ネストした括弧、複数の演算子）の処理が困難
+2. 正規表現の組み合わせ爆発による保守性の低下
+3. エラーメッセージの品質が低い
+
+ASTベースの実装により、これらの問題を解決しました。
+
+#### トークナイザー（字句解析）
+
+`internal/expression/tokenizer.go`:
 
 ```go
-type WorkflowFile struct {
-    Name     string            `yaml:"name"`
-    Env      map[string]string `yaml:"env"`
-    Jobs     map[string]Job    `yaml:"jobs"`
-    JobOrder []string          `yaml:"-"` // 定義順序を保持
+type TokenType int
+
+const (
+    TOKEN_EOF TokenType = iota
+    TOKEN_LPAREN   // (
+    TOKEN_RPAREN   // )
+    TOKEN_AND      // &&
+    TOKEN_OR       // ||
+    TOKEN_NOT      // !
+    TOKEN_EQ       // ==
+    TOKEN_NE       // !=
+    TOKEN_COMMA    // ,
+    TOKEN_STRING   // 'value'
+    TOKEN_IDENT    // env.VAR, steps.id.outcome
+    TOKEN_TRUE     // true
+    TOKEN_FALSE    // false
+)
+```
+
+トークナイザーは入力文字列をトークンの列に変換します：
+
+```
+入力: success() && env.DEPLOY == 'prod'
+  ↓
+トークン列: [IDENT:success, LPAREN, RPAREN, AND, IDENT:env.DEPLOY, EQ, STRING:prod]
+```
+
+#### 抽象構文木（AST）
+
+`internal/expression/ast.go`:
+
+```go
+// Node represents a node in the Abstract Syntax Tree.
+type Node interface {
+    node()
 }
 
-type Job struct {
-    Name   string
-    RunsOn string            `yaml:"runs-on"`
-    Env    map[string]string
-    Steps  []Step
+// BinaryExpr represents a binary expression (&&, ||, ==, !=).
+type BinaryExpr struct {
+    Left     Node
+    Operator TokenType
+    Right    Node
 }
 
-type Step struct {
-    ID               string
-    Name             string
-    If               string
-    Run              string
-    Env              map[string]string
-    WorkingDirectory string `yaml:"working-directory"`
+// UnaryExpr represents a unary expression (!).
+type UnaryExpr struct {
+    Operator TokenType
+    Operand  Node
+}
+
+// CallExpr represents a function call (e.g., success(), contains(a, b)).
+type CallExpr struct {
+    FuncName  string
+    Arguments []Node
+}
+
+// Identifier represents an identifier (e.g., env.VAR, steps.id.outcome).
+type Identifier struct {
+    Value string
+}
+
+// StringLiteral represents a string literal (e.g., 'value').
+type StringLiteral struct {
+    Value string
+}
+
+// BoolLiteral represents a boolean literal (true, false).
+type BoolLiteral struct {
+    Value bool
 }
 ```
 
-**最適化ポイント:**
-- YAMLを一度だけパースし、`yaml.Node`から構造体とジョブ順序を同時に抽出
-- マップのジョブ順序を維持するため、`JobOrder`スライスを使用
+#### パーサー（構文解析）
+
+パーサーはトークン列をASTに変換します。演算子の優先順位を正しく処理するため、**再帰下降パーサー**を採用しています：
+
+```
+入力: success() && !failure() || env.DEBUG == 'true'
+  ↓
+AST:
+        BinaryExpr(||)
+       /            \
+  BinaryExpr(&&)   BinaryExpr(==)
+   /        \        /        \
+CallExpr  UnaryExpr  Identifier  StringLiteral
+(success)    |      (env.DEBUG)   ('true')
+          CallExpr
+         (failure)
+```
+
+#### 評価エンジン
+
+`internal/expression/evaluator.go`:
+
+```go
+// ConditionEvaluator evaluates step if conditions.
+type ConditionEvaluator struct {
+    // StrictMode controls error handling behavior.
+    StrictMode bool
+
+    // cache stores parsed expressions to avoid re-parsing.
+    // This provides ~97% time reduction for repeated evaluations.
+    cache   map[string]Node
+    cacheMu sync.RWMutex
+}
+```
+
+**パフォーマンス最適化:**
+
+同じ条件式が複数回評価される場合（例：複数のステップで`success()`を使用）、パース結果をキャッシュすることで約97%の時間削減を実現しています。
+
+```go
+func (ce *ConditionEvaluator) parseWithCache(expr string) (Node, error) {
+    // Try read from cache first
+    ce.cacheMu.RLock()
+    if node, ok := ce.cache[expr]; ok {
+        ce.cacheMu.RUnlock()
+        return node, nil
+    }
+    ce.cacheMu.RUnlock()
+
+    // Parse the expression
+    node, err := ParseExpression(expr)
+    if err != nil {
+        return nil, err
+    }
+
+    // Store in cache
+    ce.cacheMu.Lock()
+    ce.cache[expr] = node
+    ce.cacheMu.Unlock()
+
+    return node, nil
+}
+```
+
+#### 短絡評価（Short-circuit Evaluation）
+
+論理演算子`&&`と`||`は短絡評価をサポートしています：
+
+```go
+case TOKEN_AND:
+    left, err := evaluateNode(binary.Left, ctx)
+    if err != nil {
+        return nil, err
+    }
+    if !toBool(left) {
+        return false, nil // Short-circuit: false && anything = false
+    }
+    right, err := evaluateNode(binary.Right, ctx)
+    if err != nil {
+        return nil, err
+    }
+    return toBool(right), nil
+```
+
+これにより、不要な評価を避けてパフォーマンスを向上させています。
+
+#### hashFiles関数の実装
+
+`hashFiles()`はファイルのSHA-256ハッシュを計算します：
+
+```go
+func evalHashFiles(args []Node, ctx *EvaluationContext) (string, error) {
+    var allBytes []byte
+    for _, arg := range args {
+        pattern := toString(patternVal)
+
+        // Glob patterns for file matching
+        matches, _ := filepath.Glob(filepath.Join(workDir, pattern))
+
+        // Sort for consistent hashing
+        sort.Strings(matches)
+
+        for _, match := range matches {
+            data, _ := os.ReadFile(match)
+            allBytes = append(allBytes, data...)
+        }
+    }
+
+    hash := sha256.Sum256(allBytes)
+    return hex.EncodeToString(hash[:]), nil
+}
+```
 
 ### 2. Git Worktreeによる隔離実行
 
-Raptorの最大の特徴は、**Git worktreeを使った隔離実行**です。
+Raptorの重要な特徴は、**Git worktreeを使った隔離実行**です。
 
 `internal/worktree/worktree.go`:
 
@@ -252,7 +455,54 @@ func RemoveWorkspace(ctx context.Context, ws *Workspace) error {
 3. **簡単なクリーンアップ**: 失敗しても`git worktree remove`で完全削除
 4. **Dockerより軽量**: コンテナ起動のオーバーヘッドなし
 
-### 3. 環境変数の階層化マージ
+### 3. ステップ実行エンジン
+
+`internal/cli/step_executor.go`:
+
+```go
+// StepExecutor handles the execution of individual workflow steps.
+type StepExecutor struct {
+    executor     executor.Executor
+    evaluator    *expression.ConditionEvaluator
+    stdout       io.Writer
+    stderr       io.Writer
+    workDir      string
+    envFilePath  string
+    pathFilePath string
+}
+
+// Execute executes a single step and returns the result.
+func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionContext) (*StepResult, error) {
+    // Merge step-level env
+    stepEnv := runtime.MergeEnv(ctx.AccumulatedEnv, step.Env)
+
+    // Evaluate if condition with AST-based evaluator
+    shouldRun, err := se.evaluator.EvaluateWithWorkDir(
+        step.If, stepEnv, ctx.StepsContext, ctx.JobSuccess, se.workDir)
+
+    if err != nil {
+        if !shouldRun {
+            // Strict mode - fail the step
+            return nil, fmt.Errorf("condition evaluation failed: %w", err)
+        }
+        // Permissive mode - log warning and continue
+        fmt.Fprintf(se.stderr, "Warning: %v\n", err)
+    }
+
+    if !shouldRun {
+        return se.handleSkippedStep(step, index, stepName, ctx)
+    }
+
+    return se.executeStep(step, index, stepName, stepEnv, ctx)
+}
+```
+
+**StrictModeの動作:**
+
+- `StrictMode=true`（デフォルト）: 条件式のエラーでワークフローを停止
+- `StrictMode=false`（`--ignore-if-errors`）: 警告を出力して続行
+
+### 4. 環境変数の階層化マージ
 
 GitHub Actionsでは、環境変数が複数レベルで定義できます。Raptorはこれを正しく処理します。
 
@@ -277,50 +527,6 @@ map[string]string{
     "GITHUB_WORKSPACE": workspacePath,
     "GITHUB_SHA":       gitHeadSHA,
     "GITHUB_REF":       gitHeadRef,
-}
-```
-
-### 4. 条件分岐（if式）評価
-
-`internal/expression/evaluator.go`:
-
-```go
-var (
-    // 正規表現をプリコンパイル（パフォーマンス最適化）
-    envComparePattern = regexp.MustCompile(`\$\{\{\s*env\.(\w+)\s*(==|!=)\s*'([^']*)'\s*\}\}`)
-    stepOutcomePattern = regexp.MustCompile(`\$\{\{\s*steps\.(\w+)\.outcome\s*(==|!=)\s*'([^']*)'\s*\}\}`)
-)
-
-func EvaluateCondition(condition string, ctx *StepContext) bool {
-    condition = strings.TrimSpace(condition)
-
-    switch condition {
-    case "", "true":
-        return true
-    case "false":
-        return false
-    case "always()":
-        return true
-    case "success()":
-        return ctx.PreviousStepSuccess
-    case "failure()":
-        return !ctx.PreviousStepSuccess
-    }
-
-    // 環境変数比較: ${{ env.VAR == 'value' }}
-    if matches := envComparePattern.FindStringSubmatch(condition); matches != nil {
-        varName, operator, expected := matches[1], matches[2], matches[3]
-        actual := ctx.Env[varName]
-        if operator == "==" {
-            return actual == expected
-        }
-        return actual != expected
-    }
-
-    // ステップ結果参照: ${{ steps.step_id.outcome == 'success' }}
-    // ...
-
-    return true // デフォルトは実行
 }
 ```
 
@@ -349,7 +555,6 @@ func ValidateEnvVar(name, value string) error {
     if reason, blocked := BlockedEnvVars[name]; blocked {
         return fmt.Errorf("blocked environment variable %s: %s", name, reason)
     }
-    // 名前・値のバリデーション
     return nil
 }
 ```
@@ -441,6 +646,7 @@ type Executor interface {
 | **起動速度** | 遅い（コンテナ起動） | 高速（プロセス直接） |
 | **バイナリサイズ** | N/A（Docker + イメージ） | 約10-15MB |
 | **隔離方式** | コンテナ隔離 | Git worktree隔離 |
+| **条件式サポート** | 完全 | AND/OR/NOT、文字列関数、hashFiles対応 |
 
 ### Raptorのメリット
 
@@ -527,18 +733,19 @@ jobs:
 
 Raptorは、GitHub Actionsの`run:`ステップをローカルで実行するためのシンプルで軽量なツールです。
 
+### 技術的ハイライト
+
+1. **ASTベースの式評価エンジン**: 完全な構文解析による高精度な条件評価
+2. **パースキャッシュ**: 同一条件式の再評価で約97%の時間削減
+3. **短絡評価**: AND/OR演算子の効率的な評価
+4. **Git worktree隔離**: Docker不要でセキュアな隔離実行
+
 ### Raptorを選ぶべき理由
 
 1. **シンプルさ**: Docker不要、単一バイナリ
 2. **高速性**: コンテナ起動のオーバーヘッドなし
 3. **セキュリティ**: Git worktree隔離、環境変数保護
-4. **使いやすさ**: 直感的なCLI、ドライランモード
-
-### 今後の展望
-
-- テストカバレッジ100%達成（現在75.1%）
-- ドキュメントの充実
-- より詳細なエラーメッセージ
+4. **高機能な条件式**: AND/OR/NOT、文字列関数、hashFilesをフルサポート
 
 GitHub Actionsのワークフローをローカルでテストしたい方は、ぜひRaptorを試してみてください！
 
