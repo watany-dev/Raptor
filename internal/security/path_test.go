@@ -2,6 +2,7 @@ package security
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -248,4 +249,169 @@ func TestValidateWorkingDirectory_AllBranches(t *testing.T) {
 	if err := ValidateWorkingDirectory("valid/subdir", "/repo"); err != nil {
 		t.Errorf("Valid relative path should succeed, got error: %v", err)
 	}
+}
+
+// TestValidatePathWithSymlinkResolution tests symlink-based path traversal detection
+func TestValidatePathWithSymlinkResolution(t *testing.T) {
+	t.Run("symlink pointing outside workspace should be rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+		outsideDir := filepath.Join(tmpDir, "outside")
+		outsideFile := filepath.Join(outsideDir, "secret.txt")
+
+		// Create directories
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+		if err := os.MkdirAll(outsideDir, 0755); err != nil {
+			t.Fatalf("failed to create outside dir: %v", err)
+		}
+
+		// Create a file outside the workspace
+		if err := os.WriteFile(outsideFile, []byte("secret"), 0644); err != nil {
+			t.Fatalf("failed to create outside file: %v", err)
+		}
+
+		// Create a symlink inside workspace pointing to outside file
+		symlinkPath := filepath.Join(workspaceDir, "innocent-link.txt")
+		if err := os.Symlink(outsideFile, symlinkPath); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// This should be rejected because the symlink points outside workspace
+		err := ValidatePathWithSymlinkResolution("innocent-link.txt", workspaceDir)
+		if err == nil {
+			t.Error("ValidatePathWithSymlinkResolution() should reject symlink pointing outside workspace")
+		}
+		if err != nil && !strings.Contains(err.Error(), "symlink") && !strings.Contains(err.Error(), "outside") {
+			t.Logf("Got error: %v", err)
+		}
+	})
+
+	t.Run("symlink pointing to directory outside workspace should be rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+		outsideDir := filepath.Join(tmpDir, "outside")
+
+		// Create directories
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+		if err := os.MkdirAll(outsideDir, 0755); err != nil {
+			t.Fatalf("failed to create outside dir: %v", err)
+		}
+
+		// Create a symlink inside workspace pointing to outside directory
+		symlinkPath := filepath.Join(workspaceDir, "innocent-dir")
+		if err := os.Symlink(outsideDir, symlinkPath); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// This should be rejected
+		err := ValidatePathWithSymlinkResolution("innocent-dir", workspaceDir)
+		if err == nil {
+			t.Error("ValidatePathWithSymlinkResolution() should reject symlink pointing to outside directory")
+		}
+	})
+
+	t.Run("symlink pointing within workspace should be allowed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+		subDir := filepath.Join(workspaceDir, "subdir")
+		targetFile := filepath.Join(subDir, "target.txt")
+
+		// Create directories
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatalf("failed to create subdir: %v", err)
+		}
+
+		// Create a target file within workspace
+		if err := os.WriteFile(targetFile, []byte("content"), 0644); err != nil {
+			t.Fatalf("failed to create target file: %v", err)
+		}
+
+		// Create a symlink inside workspace pointing to another file within workspace
+		symlinkPath := filepath.Join(workspaceDir, "link.txt")
+		if err := os.Symlink(targetFile, symlinkPath); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// This should be allowed because symlink target is within workspace
+		err := ValidatePathWithSymlinkResolution("link.txt", workspaceDir)
+		if err != nil {
+			t.Errorf("ValidatePathWithSymlinkResolution() should allow symlink within workspace, got error: %v", err)
+		}
+	})
+
+	t.Run("regular file should be allowed", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+		targetFile := filepath.Join(workspaceDir, "file.txt")
+
+		// Create directory and file
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+		if err := os.WriteFile(targetFile, []byte("content"), 0644); err != nil {
+			t.Fatalf("failed to create file: %v", err)
+		}
+
+		// Regular file should be allowed
+		err := ValidatePathWithSymlinkResolution("file.txt", workspaceDir)
+		if err != nil {
+			t.Errorf("ValidatePathWithSymlinkResolution() should allow regular file, got error: %v", err)
+		}
+	})
+
+	t.Run("non-existent path should pass basic validation", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+
+		// Non-existent path - should pass basic validation (symlink check skipped for non-existent)
+		err := ValidatePathWithSymlinkResolution("non-existent", workspaceDir)
+		if err != nil {
+			t.Errorf("ValidatePathWithSymlinkResolution() should allow non-existent path, got error: %v", err)
+		}
+	})
+
+	t.Run("chained symlinks eventually pointing outside should be rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+		outsideDir := filepath.Join(tmpDir, "outside")
+		outsideFile := filepath.Join(outsideDir, "secret.txt")
+
+		// Create directories
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+		if err := os.MkdirAll(outsideDir, 0755); err != nil {
+			t.Fatalf("failed to create outside dir: %v", err)
+		}
+
+		// Create a file outside the workspace
+		if err := os.WriteFile(outsideFile, []byte("secret"), 0644); err != nil {
+			t.Fatalf("failed to create outside file: %v", err)
+		}
+
+		// Create chained symlinks: link1 -> link2 -> outside
+		link2 := filepath.Join(workspaceDir, "link2")
+		link1 := filepath.Join(workspaceDir, "link1")
+
+		if err := os.Symlink(outsideFile, link2); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+		if err := os.Symlink(link2, link1); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// This should be rejected because the final target is outside workspace
+		err := ValidatePathWithSymlinkResolution("link1", workspaceDir)
+		if err == nil {
+			t.Error("ValidatePathWithSymlinkResolution() should reject chained symlinks pointing outside")
+		}
+	})
 }
