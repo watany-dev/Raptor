@@ -49,15 +49,49 @@ func DiscoverWorkflows(repoRoot string) ([]string, error) {
 
 	var workflows []string
 	for _, entry := range entries {
+		// Skip directories
 		if entry.IsDir() {
 			continue
 		}
 
 		name := entry.Name()
 		ext := strings.ToLower(filepath.Ext(name))
-		if ext == ".yml" || ext == ".yaml" {
-			workflows = append(workflows, filepath.Join(workflowsDir, name))
+		if ext != ".yml" && ext != ".yaml" {
+			continue
 		}
+
+		fullPath := filepath.Join(workflowsDir, name)
+
+		// Check if this is a symlink and handle it properly
+		fileInfo, err := entry.Info()
+		if err != nil {
+			// Skip entries we can't get info for
+			continue
+		}
+
+		// If it's a symlink, resolve it and verify it's a regular file
+		if fileInfo.Mode()&os.ModeSymlink != 0 {
+			// Resolve the symlink
+			resolvedPath, err := filepath.EvalSymlinks(fullPath)
+			if err != nil {
+				// Skip broken symlinks or symlink loops
+				continue
+			}
+
+			// Check if the resolved path is a regular file (not a directory)
+			resolvedInfo, err := os.Stat(resolvedPath)
+			if err != nil {
+				// Skip if we can't stat the resolved path
+				continue
+			}
+
+			if resolvedInfo.IsDir() {
+				// Skip symlinks pointing to directories
+				continue
+			}
+		}
+
+		workflows = append(workflows, fullPath)
 	}
 
 	return workflows, nil

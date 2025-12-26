@@ -801,6 +801,160 @@ func TestExtractJobOrderFromNode_SequenceRoot(t *testing.T) {
 	}
 }
 
+// TestDiscoverWorkflows_SymlinkLoop tests that symlink loops don't cause infinite loops
+func TestDiscoverWorkflows_SymlinkLoop(t *testing.T) {
+	t.Run("circular symlink in workflows directory should not hang", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+		if err := os.MkdirAll(workflowDir, 0755); err != nil {
+			t.Fatalf("failed to create workflow directory: %v", err)
+		}
+
+		// Create a circular symlink: loop -> .
+		loopPath := filepath.Join(workflowDir, "loop")
+		if err := os.Symlink(".", loopPath); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// Should not hang and should complete
+		workflows, err := DiscoverWorkflows(tmpDir)
+		// Either returns empty/nil or error, but should not hang
+		if err != nil {
+			t.Logf("Got error (acceptable): %v", err)
+		}
+		t.Logf("Found %d workflows", len(workflows))
+	})
+
+	t.Run("symlink pointing to parent directory should not hang", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+		if err := os.MkdirAll(workflowDir, 0755); err != nil {
+			t.Fatalf("failed to create workflow directory: %v", err)
+		}
+
+		// Create a symlink pointing to parent: parent -> ..
+		parentLink := filepath.Join(workflowDir, "parent")
+		if err := os.Symlink("..", parentLink); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// Should not hang
+		workflows, err := DiscoverWorkflows(tmpDir)
+		if err != nil {
+			t.Logf("Got error (acceptable): %v", err)
+		}
+		t.Logf("Found %d workflows", len(workflows))
+	})
+
+	t.Run("deeply nested symlink loop should not hang", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+		subDir := filepath.Join(workflowDir, "subdir")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatalf("failed to create subdirectory: %v", err)
+		}
+
+		// Create mutual symlinks: a -> b, b -> a
+		linkA := filepath.Join(workflowDir, "linkA")
+		linkB := filepath.Join(workflowDir, "linkB")
+		if err := os.Symlink(linkB, linkA); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+		if err := os.Symlink(linkA, linkB); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// Should not hang
+		workflows, err := DiscoverWorkflows(tmpDir)
+		if err != nil {
+			t.Logf("Got error (acceptable): %v", err)
+		}
+		t.Logf("Found %d workflows", len(workflows))
+	})
+}
+
+// TestDiscoverWorkflows_BrokenSymlink tests handling of broken symlinks
+func TestDiscoverWorkflows_BrokenSymlink(t *testing.T) {
+	t.Run("broken symlink should be skipped gracefully", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+		if err := os.MkdirAll(workflowDir, 0755); err != nil {
+			t.Fatalf("failed to create workflow directory: %v", err)
+		}
+
+		// Create a valid workflow file
+		validWorkflow := filepath.Join(workflowDir, "valid.yml")
+		if err := os.WriteFile(validWorkflow, []byte("name: Valid\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - run: echo test\n"), 0644); err != nil {
+			t.Fatalf("failed to write workflow file: %v", err)
+		}
+
+		// Create a broken symlink (pointing to non-existent file)
+		brokenLink := filepath.Join(workflowDir, "broken.yml")
+		if err := os.Symlink("/nonexistent/path/file.yml", brokenLink); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// Should still discover valid workflows
+		workflows, err := DiscoverWorkflows(tmpDir)
+		if err != nil {
+			t.Fatalf("DiscoverWorkflows() error = %v", err)
+		}
+
+		// Should find at least the valid workflow
+		if len(workflows) < 1 {
+			t.Error("Should have discovered at least the valid workflow")
+		}
+
+		// Check that valid.yml is in the list
+		found := false
+		for _, wf := range workflows {
+			if strings.HasSuffix(wf, "valid.yml") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("valid.yml should be in the discovered workflows")
+		}
+	})
+}
+
+// TestDiscoverWorkflows_SymlinkToDirectory tests symlink pointing to directory
+func TestDiscoverWorkflows_SymlinkToDirectory(t *testing.T) {
+	t.Run("symlink pointing to directory should be handled", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workflowDir := filepath.Join(tmpDir, ".github", "workflows")
+		otherDir := filepath.Join(tmpDir, "other")
+		if err := os.MkdirAll(workflowDir, 0755); err != nil {
+			t.Fatalf("failed to create workflow directory: %v", err)
+		}
+		if err := os.MkdirAll(otherDir, 0755); err != nil {
+			t.Fatalf("failed to create other directory: %v", err)
+		}
+
+		// Create a workflow file in other directory
+		otherWorkflow := filepath.Join(otherDir, "other.yml")
+		if err := os.WriteFile(otherWorkflow, []byte("name: Other\n"), 0644); err != nil {
+			t.Fatalf("failed to write workflow file: %v", err)
+		}
+
+		// Create a symlink in workflows dir pointing to other directory
+		dirLink := filepath.Join(workflowDir, "linked-dir")
+		if err := os.Symlink(otherDir, dirLink); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// Should not error and should not follow symlink into directory
+		workflows, err := DiscoverWorkflows(tmpDir)
+		if err != nil {
+			t.Fatalf("DiscoverWorkflows() error = %v", err)
+		}
+
+		// The linked directory should not be followed (we only look at direct entries)
+		t.Logf("Found %d workflows: %v", len(workflows), workflows)
+	})
+}
+
 // TestExtractJobOrderFromNode_DirectCall tests extractJobOrderFromNode directly
 // to cover the doc.Kind != yaml.MappingNode branch
 func TestExtractJobOrderFromNode_DirectCall(t *testing.T) {
