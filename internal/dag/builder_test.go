@@ -10,17 +10,17 @@ import (
 
 func TestBuildFromJobs(t *testing.T) {
 	tests := []struct {
-		name        string
-		jobs        map[string]workflow.Job
-		wantErr     error
-		wantNodes   int
-		validateFn  func(*Graph) error
+		name       string
+		jobs       map[string]workflow.Job
+		wantErr    error
+		wantNodes  int
+		validateFn func(*Graph) error
 	}{
 		{
 			name: "simple linear dependency",
 			jobs: map[string]workflow.Job{
-				"build": {},
-				"test":  {Needs: []string{"build"}},
+				"build":  {},
+				"test":   {Needs: []string{"build"}},
 				"deploy": {Needs: []string{"test"}},
 			},
 			wantNodes: 3,
@@ -155,11 +155,11 @@ func TestBuildFromJobs(t *testing.T) {
 
 func TestResolveWithDependencies(t *testing.T) {
 	tests := []struct {
-		name       string
-		jobs       map[string]workflow.Job
-		targetJob  string
-		wantJobs   []string // jobs that should be in result (order may vary)
-		wantErr    error
+		name      string
+		jobs      map[string]workflow.Job
+		targetJob string
+		wantJobs  []string // jobs that should be in result (order may vary)
+		wantErr   error
 	}{
 		{
 			name: "job with no dependencies",
