@@ -9,6 +9,7 @@ Raptor is a CLI tool for running GitHub Actions workflow files (`.github/workflo
 ## Features
 
 - Native support for GitHub Actions workflow YAML
+- Job dependencies (`needs`) with automatic dependency resolution
 - Environment variables support at workflow/job/step levels
 - Dynamic environment variable propagation via `GITHUB_ENV` / `GITHUB_PATH`
 - Per-step working directory configuration
@@ -131,13 +132,17 @@ Name: CI
 📋 Job: build
    Runs-on: ubuntu-latest
 
-   [1] Setup
-       Command:
-         echo "Setting up..."
-
-   [2] Build
+   [1] Build
        Command:
          echo "Building..."
+
+📋 Job: test
+   Depends on: build
+   Runs-on: ubuntu-latest
+
+   [1] Test
+       Command:
+         echo "Testing..."
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 To execute this workflow, use: raptor run -w .github/workflows/ci.yml
@@ -164,6 +169,24 @@ raptor run -w ci.yml
 raptor run -w .github/workflows/ci.yml -j lint -C /path/to/project
 ```
 
+### Job Dependencies
+
+When using `-j` to run a specific job, Raptor automatically resolves and executes all its dependencies first:
+
+```bash
+# If deploy needs test, and test needs build:
+# This runs: build → test → deploy
+raptor run -w ci.yml -j deploy
+```
+
+If a dependency fails, dependent jobs are automatically skipped:
+
+```
+INFO running job job_id=build
+INFO running job job_id=test
+INFO skipping job job_id=deploy reason="dependency 'test' failed"
+```
+
 ### Help
 
 ```bash
@@ -188,6 +211,7 @@ Currently supported GitHub Actions syntax:
 | Feature | Support |
 |---------|---------|
 | `name` (workflow/job/step names) | ✅ |
+| `needs` (job dependencies) | ✅ |
 | `env` (environment variables) | ✅ |
 | `run` (shell commands) | ✅ |
 | `working-directory` | ✅ |
@@ -281,25 +305,24 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    env:
-      JOB_VAR: "job-value"
     steps:
-      - name: Setup
-        run: echo "Setting up..."
-        env:
-          STEP_VAR: "step-value"
-
       - name: Build
-        run: |
-          echo "Building..."
-          echo "GLOBAL_VAR=$GLOBAL_VAR"
+        run: echo "Building..."
 
-      - name: Set dynamic env
-        run: |
-          echo "MY_VAR=dynamic-value" >> $GITHUB_ENV
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Test
+        run: echo "Testing..."
 
-      - name: Use dynamic env
-        run: echo "MY_VAR is $MY_VAR"
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    steps:
+      - name: Deploy
+        if: success()
+        run: echo "Deploying..."
 ```
 
 ## Security
@@ -352,6 +375,7 @@ raptor/
 ├── cmd/raptor/        # CLI entry point
 ├── internal/
 │   ├── cli/           # CLI flag parsing and runner
+│   ├── dag/           # Job dependency graph (topological sort)
 │   ├── envfiles/      # GITHUB_ENV/GITHUB_PATH parsing
 │   ├── executor/      # Command execution engine
 │   ├── expression/    # Expression evaluation (if conditions)

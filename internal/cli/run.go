@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/watany-dev/raptor/internal/dag"
 	"github.com/watany-dev/raptor/internal/executor"
 	"github.com/watany-dev/raptor/internal/expression"
 	"github.com/watany-dev/raptor/internal/runtime"
@@ -56,16 +57,19 @@ type StepResult struct {
 type RunResult struct {
 	JobID       string
 	Success     bool
+	Skipped     bool   // True if job was skipped due to dependency failure
+	SkipReason  string // Reason for skipping (e.g., "dependency 'build' failed")
 	StepResults []StepResult
 }
 
 // runContext holds the context for a workflow run.
 type runContext struct {
-	workDir   string
-	repoRoot  string
-	sha       string
-	ref       string
-	workspace *worktree.Workspace
+	workDir    string
+	repoRoot   string
+	sha        string
+	ref        string
+	workspace  *worktree.Workspace
+	jobResults map[string]*RunResult // Track results of completed jobs for dependency checking
 }
 
 // Run executes workflow job(s) with the given options.
@@ -83,8 +87,11 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 		return nil, fmt.Errorf("failed to load workflow: %w", err)
 	}
 
-	// Determine which jobs to run
-	jobIDs := r.determineJobIDs(wf, opts)
+	// Determine which jobs to run (with dependency resolution)
+	jobIDs, err := r.determineJobIDs(wf, opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve job dependencies: %w", err)
+	}
 
 	// Dry-run mode: show what would be executed without running
 	if opts.DryRun {
@@ -105,28 +112,81 @@ func (r *Runner) Run(opts *RunOptions) ([]*RunResult, error) {
 }
 
 // determineJobIDs determines which jobs to run based on options.
-func (r *Runner) determineJobIDs(wf *workflow.WorkflowFile, opts *RunOptions) []string {
-	if opts.Job != "" {
-		return []string{opts.Job}
+// Jobs are returned in topological order (dependencies first).
+func (r *Runner) determineJobIDs(wf *workflow.WorkflowFile, opts *RunOptions) ([]string, error) {
+	// Build dependency graph from workflow jobs
+	graph, err := dag.BuildFromJobs(wf.Jobs)
+	if err != nil {
+		return nil, err
 	}
-	return wf.JobOrder
+
+	// If a specific job is requested, resolve it with all its dependencies
+	if opts.Job != "" {
+		return dag.ResolveWithDependencies(graph, opts.Job)
+	}
+
+	// Otherwise, return all jobs in topological order
+	return graph.TopologicalSort()
 }
 
 // executeJobs executes the specified jobs sequentially.
+// Jobs are skipped if their dependencies failed.
 func (r *Runner) executeJobs(wf *workflow.WorkflowFile, jobIDs []string, opts *RunOptions, runCtx *runContext) ([]*RunResult, error) {
+	// Initialize job results tracking
+	runCtx.jobResults = make(map[string]*RunResult)
+
 	var results []*RunResult
 	for _, jobID := range jobIDs {
+		job := wf.Jobs[jobID]
+
+		// Check if this job should be skipped due to dependency failure
+		if shouldSkip, reason := r.shouldSkipJob(&job, runCtx); shouldSkip {
+			slog.Info("skipping job", "job_id", jobID, "reason", reason)
+			result := &RunResult{
+				JobID:      jobID,
+				Success:    false,
+				Skipped:    true,
+				SkipReason: reason,
+			}
+			runCtx.jobResults[jobID] = result
+			results = append(results, result)
+			continue
+		}
+
 		result, err := r.runJob(wf, jobID, opts, runCtx)
 		if err != nil {
 			return results, err
 		}
+
+		// Track the result for dependency checking
+		runCtx.jobResults[jobID] = result
 		results = append(results, result)
-		if !result.Success {
-			// Stop on first failure
-			return results, nil
-		}
+
+		// Note: We continue executing other jobs even if one fails
+		// because later jobs might not depend on the failed job
 	}
 	return results, nil
+}
+
+// shouldSkipJob checks if a job should be skipped based on its dependencies.
+// Returns true and a reason if any dependency failed or was skipped.
+func (r *Runner) shouldSkipJob(job *workflow.Job, runCtx *runContext) (bool, string) {
+	for _, depJobID := range job.Needs {
+		depResult, exists := runCtx.jobResults[depJobID]
+		if !exists {
+			// Dependency hasn't been executed - this shouldn't happen with topological sort
+			return true, fmt.Sprintf("dependency '%s' was not executed", depJobID)
+		}
+
+		if depResult.Skipped {
+			return true, fmt.Sprintf("dependency '%s' was skipped", depJobID)
+		}
+
+		if !depResult.Success {
+			return true, fmt.Sprintf("dependency '%s' failed", depJobID)
+		}
+	}
+	return false, ""
 }
 
 // setupRunContext sets up an isolated git worktree for secure execution.

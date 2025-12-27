@@ -575,13 +575,17 @@ jobs:
 		}
 	}
 
-	// Verify job IDs in results (definition order: build before test)
-	// Note: Job status messages are now logged via slog.Info instead of stdout
-	if results[0].JobID != "build" {
-		t.Errorf("First job should be 'build', got %q", results[0].JobID)
+	// Verify both job IDs are present in results
+	// Note: Order is determined by topological sort (alphabetical when no dependencies)
+	jobIDs := make(map[string]bool)
+	for _, result := range results {
+		jobIDs[result.JobID] = true
 	}
-	if results[1].JobID != "test" {
-		t.Errorf("Second job should be 'test', got %q", results[1].JobID)
+	if !jobIDs["build"] {
+		t.Error("Expected 'build' job in results")
+	}
+	if !jobIDs["test"] {
+		t.Error("Expected 'test' job in results")
 	}
 }
 
@@ -1201,5 +1205,331 @@ jobs:
 	output := stdout.String()
 	if !strings.Contains(output, "output test") {
 		t.Errorf("SetOutput() did not redirect output to buffer, got: %q", output)
+	}
+}
+
+// Tests for job dependency (needs) functionality
+
+func TestRunner_Run_JobDependencies(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "building"
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - run: echo "testing"
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    steps:
+      - run: echo "deploying"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0, Stdout: "building\n"},
+		executor.Result{ExitCode: 0, Stdout: "testing\n"},
+		executor.Result{ExitCode: 0, Stdout: "deploying\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Verify all 3 jobs were executed
+	if len(results) != 3 {
+		t.Errorf("Expected 3 job results, got %d", len(results))
+	}
+
+	// Verify execution order respects dependencies
+	jobOrder := make([]string, len(results))
+	for i, r := range results {
+		jobOrder[i] = r.JobID
+	}
+
+	// Build position map
+	pos := make(map[string]int)
+	for i, id := range jobOrder {
+		pos[id] = i
+	}
+
+	// build must come before test
+	if pos["build"] >= pos["test"] {
+		t.Errorf("build should come before test, got order: %v", jobOrder)
+	}
+
+	// build must come before deploy
+	if pos["build"] >= pos["deploy"] {
+		t.Errorf("build should come before deploy, got order: %v", jobOrder)
+	}
+
+	// test must come before deploy
+	if pos["test"] >= pos["deploy"] {
+		t.Errorf("test should come before deploy, got order: %v", jobOrder)
+	}
+
+	// All jobs should succeed
+	for _, r := range results {
+		if !r.Success {
+			t.Errorf("Job %s should have succeeded", r.JobID)
+		}
+	}
+}
+
+func TestRunner_Run_JobDependencySkip(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: exit 1
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - run: echo "testing"
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - run: echo "deploying"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 1, Stderr: "build failed\n"}, // build fails
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Verify all 3 jobs have results
+	if len(results) != 3 {
+		t.Errorf("Expected 3 job results, got %d", len(results))
+	}
+
+	// Create result map
+	resultMap := make(map[string]*RunResult)
+	for _, r := range results {
+		resultMap[r.JobID] = r
+	}
+
+	// build should have failed
+	if resultMap["build"].Success {
+		t.Error("build job should have failed")
+	}
+	if resultMap["build"].Skipped {
+		t.Error("build job should not be skipped")
+	}
+
+	// test should be skipped due to build failure
+	if !resultMap["test"].Skipped {
+		t.Error("test job should be skipped")
+	}
+	if !strings.Contains(resultMap["test"].SkipReason, "build") {
+		t.Errorf("test skip reason should mention 'build', got: %s", resultMap["test"].SkipReason)
+	}
+
+	// deploy should be skipped due to test being skipped
+	if !resultMap["deploy"].Skipped {
+		t.Error("deploy job should be skipped")
+	}
+	if !strings.Contains(resultMap["deploy"].SkipReason, "test") {
+		t.Errorf("deploy skip reason should mention 'test', got: %s", resultMap["deploy"].SkipReason)
+	}
+}
+
+func TestRunner_Run_SpecificJobWithDependencies(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "building"
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - run: echo "testing"
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - run: echo "deploying"
+  unrelated:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "unrelated"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	mock := newMockExecutor(
+		executor.Result{ExitCode: 0, Stdout: "building\n"},
+		executor.Result{ExitCode: 0, Stdout: "testing\n"},
+		executor.Result{ExitCode: 0, Stdout: "deploying\n"},
+	)
+
+	runner := NewRunner(mock)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	// Request only deploy job - should automatically include build and test
+	results, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "deploy",
+		WorkingDir: tmpDir,
+	})
+
+	if err != nil {
+		t.Fatalf("Run() error = %v", err)
+	}
+
+	// Verify only 3 jobs (build, test, deploy) were executed, not unrelated
+	if len(results) != 3 {
+		t.Errorf("Expected 3 job results (build, test, deploy), got %d", len(results))
+	}
+
+	// Verify unrelated was not executed
+	for _, r := range results {
+		if r.JobID == "unrelated" {
+			t.Error("unrelated job should not have been executed")
+		}
+	}
+
+	// Verify all executed jobs succeeded
+	for _, r := range results {
+		if !r.Success {
+			t.Errorf("Job %s should have succeeded", r.JobID)
+		}
+	}
+}
+
+func TestRunner_Run_CyclicDependencyError(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  a:
+    runs-on: ubuntu-latest
+    needs: c
+    steps:
+      - run: echo "a"
+  b:
+    runs-on: ubuntu-latest
+    needs: a
+    steps:
+      - run: echo "b"
+  c:
+    runs-on: ubuntu-latest
+    needs: b
+    steps:
+      - run: echo "c"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	runner := NewRunner(newMockExecutor())
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	_, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "",
+		WorkingDir: tmpDir,
+	})
+
+	if err == nil {
+		t.Fatal("Expected error for cyclic dependency, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "cyclic") {
+		t.Errorf("Error should mention cyclic dependency, got: %v", err)
+	}
+}
+
+func TestRunner_Run_UnknownDependencyError(t *testing.T) {
+	tmpDir := t.TempDir()
+	setupTestGitRepo(t, tmpDir)
+	workflowPath := filepath.Join(tmpDir, "workflow.yml")
+	workflowContent := `
+name: Test Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    needs: nonexistent
+    steps:
+      - run: echo "test"
+`
+	if err := os.WriteFile(workflowPath, []byte(workflowContent), 0644); err != nil {
+		t.Fatalf("Failed to write workflow file: %v", err)
+	}
+
+	runner := NewRunner(newMockExecutor())
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	runner.SetOutput(stdout, stderr)
+
+	_, err := runner.Run(&RunOptions{
+		Workflow:   workflowPath,
+		Job:        "",
+		WorkingDir: tmpDir,
+	})
+
+	if err == nil {
+		t.Fatal("Expected error for unknown dependency, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "nonexistent") {
+		t.Errorf("Error should mention nonexistent dependency, got: %v", err)
 	}
 }
