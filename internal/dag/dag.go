@@ -161,16 +161,13 @@ func (g *Graph) TopologicalSort() ([]string, error) {
 			queue = append(queue, node)
 		}
 	}
-	// Sort for deterministic order
+	// Sort initial queue for deterministic order
 	sort.Strings(queue)
 
 	var result []string
 
 	for len(queue) > 0 {
-		// Sort once per iteration for deterministic order
-		sort.Strings(queue)
-
-		// Pop from queue
+		// Pop from queue (already sorted)
 		node := queue[0]
 		queue = queue[1:]
 
@@ -179,11 +176,17 @@ func (g *Graph) TopologicalSort() ([]string, error) {
 		result = append(result, node)
 
 		// For each dependency of this node, reduce its in-degree
+		added := false
 		for _, dep := range g.edges[node] {
 			inDegree[dep]--
 			if inDegree[dep] == 0 {
 				queue = append(queue, dep)
+				added = true
 			}
+		}
+		// Re-sort only when new nodes were added
+		if added {
+			sort.Strings(queue)
 		}
 	}
 
