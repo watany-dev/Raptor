@@ -150,7 +150,7 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 		return nil, noopCleanup, fmt.Errorf("failed to create workspace: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(r.stdout, "Created isolated workspace: %s\n", ws.Path)
+	slog.Info("created isolated workspace", "path", ws.Path)
 
 	// Get git info from original repo
 	sha, _ := util.GitHeadSHA(ctx, repoRoot)
@@ -160,7 +160,7 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 		if err := worktree.RemoveWorkspace(ctx, ws); err != nil {
 			slog.Warn("failed to remove workspace", "path", ws.Path, "error", err)
 		} else {
-			_, _ = fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
+			slog.Info("cleaned up workspace", "path", ws.Path)
 		}
 	}
 
@@ -181,7 +181,7 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 		return nil, fmt.Errorf("failed to select job: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(r.stdout, "=== Running job: %s ===\n", jobID)
+	slog.Info("running job", "job_id", jobID)
 
 	result := &RunResult{
 		JobID:       jobID,
@@ -242,14 +242,9 @@ func (r *Runner) runJob(wf *workflow.WorkflowFile, jobID string, opts *RunOption
 
 // printSecurityWarning prints a security warning before execution.
 func (r *Runner) printSecurityWarning(opts *RunOptions) {
-	_, _ = fmt.Fprintln(r.stderr, "")
-	_, _ = fmt.Fprintln(r.stderr, "⚠️  SECURITY WARNING")
-	_, _ = fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	_, _ = fmt.Fprintln(r.stderr, "This tool executes commands from workflow files with your user privileges.")
-	_, _ = fmt.Fprintln(r.stderr, "Only run workflows from trusted sources.")
-	_, _ = fmt.Fprintln(r.stderr, "")
-	_, _ = fmt.Fprintf(r.stderr, "Workflow: %s\n", opts.Workflow)
-	_, _ = fmt.Fprintln(r.stderr, "Execution: Isolated git worktree (secure mode)")
-	_, _ = fmt.Fprintln(r.stderr, "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-	_, _ = fmt.Fprintln(r.stderr, "")
+	slog.Warn("security warning: executing workflow with user privileges",
+		"workflow", opts.Workflow,
+		"execution_mode", "isolated git worktree",
+		"note", "only run workflows from trusted sources",
+	)
 }

@@ -86,9 +86,9 @@ func runCommand(args []string, forceDryRun bool) error {
 	}
 
 	if len(results) == 1 {
-		fmt.Println("Job completed successfully")
+		slog.Info("job completed successfully")
 	} else {
-		fmt.Printf("All %d jobs completed successfully\n", len(results))
+		slog.Info("all jobs completed successfully", "count", len(results))
 	}
 	return nil
 }

@@ -575,20 +575,13 @@ jobs:
 		}
 	}
 
-	// Verify job names are present (in definition order)
-	output := stdout.String()
-	if !strings.Contains(output, "=== Running job: build ===") {
-		t.Error("Output should contain build job header")
+	// Verify job IDs in results (definition order: build before test)
+	// Note: Job status messages are now logged via slog.Info instead of stdout
+	if results[0].JobID != "build" {
+		t.Errorf("First job should be 'build', got %q", results[0].JobID)
 	}
-	if !strings.Contains(output, "=== Running job: test ===") {
-		t.Error("Output should contain test job header")
-	}
-
-	// Verify definition order (build before test)
-	buildIdx := strings.Index(output, "=== Running job: build ===")
-	testIdx := strings.Index(output, "=== Running job: test ===")
-	if buildIdx > testIdx {
-		t.Error("Jobs should run in definition order (build before test)")
+	if results[1].JobID != "test" {
+		t.Errorf("Second job should be 'test', got %q", results[1].JobID)
 	}
 }
 

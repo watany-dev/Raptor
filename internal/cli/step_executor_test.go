@@ -882,17 +882,8 @@ func TestStepExecutor_handleUnsupportedAction(t *testing.T) {
 			t.Errorf("StepContext.Outcome = %q, want %q", stepCtx.Outcome, "skipped")
 		}
 
-		// Check output contains warning message
-		output := stdout.String()
-		if !bytes.Contains([]byte(output), []byte("Skipping")) {
-			t.Error("Output should contain 'Skipping'")
-		}
-		if !bytes.Contains([]byte(output), []byte("uses: not supported")) {
-			t.Error("Output should mention 'uses: not supported'")
-		}
-		if !bytes.Contains([]byte(output), []byte("actions/checkout@v4")) {
-			t.Error("Output should contain the action name")
-		}
+		// Note: Warning message is now logged via slog.Warn instead of stdout
+		// The important behavior (result marked as skipped) is verified above
 	})
 
 	t.Run("handles step without ID", func(t *testing.T) {

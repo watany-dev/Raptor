@@ -115,7 +115,7 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 
 // handleSkippedStep handles a step that should be skipped due to condition evaluation.
 func (se *StepExecutor) handleSkippedStep(step *workflow.Step, index int, stepName string, ctx *ExecutionContext) (*StepResult, error) {
-	_, _ = fmt.Fprintf(se.stdout, "Skipping step (condition evaluated to false)\n")
+	slog.Info("skipping step", "step", stepName, "reason", "condition evaluated to false")
 	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 
 	stepResult := &StepResult{
@@ -134,7 +134,7 @@ func (se *StepExecutor) handleSkippedStep(step *workflow.Step, index int, stepNa
 // handleUnsupportedAction handles a step that uses GitHub Actions (uses: field).
 // GitHub Actions are not supported by Raptor, so we skip with an explicit message.
 func (se *StepExecutor) handleUnsupportedAction(step *workflow.Step, index int, stepName string, ctx *ExecutionContext) (*StepResult, error) {
-	_, _ = fmt.Fprintf(se.stdout, "⚠️  Skipping: %s (uses: not supported)\n", step.Uses)
+	slog.Warn("skipping unsupported action", "step", stepName, "uses", step.Uses)
 	_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 
 	stepResult := &StepResult{
