@@ -161,13 +161,11 @@ func (g *Graph) TopologicalSort() ([]string, error) {
 			queue = append(queue, node)
 		}
 	}
-	// Sort for deterministic order
-	sort.Strings(queue)
 
 	var result []string
 
 	for len(queue) > 0 {
-		// Sort once per iteration for deterministic order
+		// Sort for deterministic order (handles initial queue and newly added nodes)
 		sort.Strings(queue)
 
 		// Pop from queue
