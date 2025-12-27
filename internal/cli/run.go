@@ -57,9 +57,13 @@ type StepResult struct {
 type RunResult struct {
 	JobID       string
 	Success     bool
-	Skipped     bool   // True if job was skipped due to dependency failure
-	SkipReason  string // Reason for skipping (e.g., "dependency 'build' failed")
+	SkipReason  string // Non-empty if job was skipped (e.g., "dependency 'build' failed")
 	StepResults []StepResult
+}
+
+// IsSkipped returns true if the job was skipped due to dependency failure.
+func (r *RunResult) IsSkipped() bool {
+	return r.SkipReason != ""
 }
 
 // runContext holds the context for a workflow run.
@@ -145,7 +149,6 @@ func (r *Runner) executeJobs(wf *workflow.WorkflowFile, jobIDs []string, opts *R
 			result := &RunResult{
 				JobID:      jobID,
 				Success:    false,
-				Skipped:    true,
 				SkipReason: reason,
 			}
 			runCtx.jobResults[jobID] = result
@@ -178,7 +181,7 @@ func (r *Runner) shouldSkipJob(job *workflow.Job, runCtx *runContext) (bool, str
 			return true, fmt.Sprintf("dependency '%s' was not executed", depJobID)
 		}
 
-		if depResult.Skipped {
+		if depResult.IsSkipped() {
 			return true, fmt.Sprintf("dependency '%s' was skipped", depJobID)
 		}
 

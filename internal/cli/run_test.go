@@ -1357,12 +1357,12 @@ jobs:
 	if resultMap["build"].Success {
 		t.Error("build job should have failed")
 	}
-	if resultMap["build"].Skipped {
+	if resultMap["build"].IsSkipped() {
 		t.Error("build job should not be skipped")
 	}
 
 	// test should be skipped due to build failure
-	if !resultMap["test"].Skipped {
+	if !resultMap["test"].IsSkipped() {
 		t.Error("test job should be skipped")
 	}
 	if !strings.Contains(resultMap["test"].SkipReason, "build") {
@@ -1370,7 +1370,7 @@ jobs:
 	}
 
 	// deploy should be skipped due to test being skipped
-	if !resultMap["deploy"].Skipped {
+	if !resultMap["deploy"].IsSkipped() {
 		t.Error("deploy job should be skipped")
 	}
 	if !strings.Contains(resultMap["deploy"].SkipReason, "test") {
