@@ -187,10 +187,9 @@ func (g *Graph) TopologicalSort() ([]string, error) {
 		}
 	}
 
-	// Check if all nodes were processed
+	// Check if all nodes were processed (cycle exists if not)
 	if len(result) != len(g.nodes) {
-		cycle := g.FindCycle()
-		return nil, fmt.Errorf("%w: %v", ErrCyclicDependency, cycle)
+		return nil, ErrCyclicDependency
 	}
 
 	// Reverse the result so dependencies come first
