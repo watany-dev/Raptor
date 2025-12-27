@@ -1,18 +1,42 @@
 package dag
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/watany-dev/raptor/internal/workflow"
 )
 
+// Limits matching GitHub Actions constraints.
+const (
+	// MaxJobs is the maximum number of jobs per workflow (matches GitHub Actions limit).
+	MaxJobs = 256
+	// MaxJobNameLength is the maximum length of a job identifier.
+	MaxJobNameLength = 256
+)
+
+// ErrTooManyJobs is returned when a workflow exceeds the maximum job limit.
+var ErrTooManyJobs = errors.New("workflow exceeds maximum job limit")
+
+// ErrJobNameTooLong is returned when a job name exceeds the maximum length.
+var ErrJobNameTooLong = errors.New("job name exceeds maximum length")
+
 // BuildFromJobs constructs a dependency graph from workflow jobs.
 // It validates that all dependencies exist and there are no cycles.
 func BuildFromJobs(jobs map[string]workflow.Job) (*Graph, error) {
+	// Validate job count (matches GitHub Actions limit of 256)
+	if len(jobs) > MaxJobs {
+		return nil, fmt.Errorf("%w: %d jobs (max %d)", ErrTooManyJobs, len(jobs), MaxJobs)
+	}
+
 	g := New()
 
-	// First pass: add all jobs as nodes
+	// First pass: add all jobs as nodes with name validation
 	for jobID := range jobs {
+		if len(jobID) > MaxJobNameLength {
+			return nil, fmt.Errorf("%w: '%s' (%d chars, max %d)",
+				ErrJobNameTooLong, jobID[:50]+"...", len(jobID), MaxJobNameLength)
+		}
 		g.AddNode(jobID)
 	}
 
