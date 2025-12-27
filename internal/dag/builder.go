@@ -51,26 +51,27 @@ func ResolveWithDependencies(g *Graph, jobID string) ([]string, error) {
 		return nil, fmt.Errorf("%w: '%s'", ErrUnknownDependency, jobID)
 	}
 
-	// Get all transitive dependencies
+	// Build set of target nodes (job + all dependencies)
 	allDeps := g.GetAllDependencies(jobID)
-
-	// Create a subgraph with only the relevant nodes
-	subgraph := New()
-	subgraph.AddNode(jobID)
+	targetNodes := make(map[string]bool, len(allDeps)+1)
+	targetNodes[jobID] = true
 	for _, dep := range allDeps {
-		subgraph.AddNode(dep)
+		targetNodes[dep] = true
 	}
 
-	// Add edges for the subgraph
-	for node := range subgraph.nodes {
-		for _, dep := range g.edges[node] {
-			if subgraph.nodes[dep] {
-				subgraph.edges[node] = append(subgraph.edges[node], dep)
-			}
+	// Get full topological order and filter to target nodes
+	fullOrder, err := g.TopologicalSort()
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]string, 0, len(targetNodes))
+	for _, node := range fullOrder {
+		if targetNodes[node] {
+			result = append(result, node)
 		}
 	}
-
-	return subgraph.TopologicalSort()
+	return result, nil
 }
 
 // formatCycle formats a cycle path for error messages.
