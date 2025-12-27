@@ -113,15 +113,11 @@ func TestGitHeadRef(t *testing.T) {
 		}
 	})
 
-	t.Run("returns empty string for detached HEAD", func(t *testing.T) {
-		// When not in a valid git repo or in detached HEAD state,
-		// GitHeadRef returns empty string without error
-		ref, err := GitHeadRef(ctx, "/tmp")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if ref != "" {
-			t.Errorf("expected empty string for non-git directory, got %q", ref)
+	t.Run("returns error for non-git directory", func(t *testing.T) {
+		// Non-git directory should return an error
+		_, err := GitHeadRef(ctx, "/tmp")
+		if err == nil {
+			t.Error("expected error for non-git directory, got nil")
 		}
 	})
 }

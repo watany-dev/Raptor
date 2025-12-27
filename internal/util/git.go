@@ -2,6 +2,7 @@ package util
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -45,7 +46,12 @@ func GitHeadSHA(ctx context.Context, repoRoot string) (string, error) {
 func GitHeadRef(ctx context.Context, repoRoot string) (string, error) {
 	out, err := runGit(ctx, repoRoot, "symbolic-ref", "-q", "HEAD")
 	if err != nil {
-		return "", nil // Detached HEAD
+		// git symbolic-ref -q exits with code 1 for detached HEAD (not an error)
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to get HEAD ref: %w", err)
 	}
 	return out, nil
 }
