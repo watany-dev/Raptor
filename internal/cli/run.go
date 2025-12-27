@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -157,7 +158,7 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 
 	cleanup := func() {
 		if err := worktree.RemoveWorkspace(ctx, ws); err != nil {
-			_, _ = fmt.Fprintf(r.stderr, "Warning: failed to remove workspace: %v\n", err)
+			slog.Warn("failed to remove workspace", "path", ws.Path, "error", err)
 		} else {
 			_, _ = fmt.Fprintf(r.stdout, "Cleaned up workspace: %s\n", ws.Path)
 		}
