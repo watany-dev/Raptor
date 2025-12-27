@@ -5,12 +5,24 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/watany-dev/raptor/internal/executor"
 	"github.com/watany-dev/raptor/internal/expression"
 	"github.com/watany-dev/raptor/internal/workflow"
 )
+
+// captureSlog temporarily redirects slog output to a buffer for testing.
+// Returns the buffer and a cleanup function to restore the original logger.
+func captureSlog(t *testing.T) (*bytes.Buffer, func()) {
+	t.Helper()
+	buf := &bytes.Buffer{}
+	original := slog.Default()
+	handler := slog.NewTextHandler(buf, nil)
+	slog.SetDefault(slog.New(handler))
+	return buf, func() { slog.SetDefault(original) }
+}
 
 // TestStepExecutor_Execute tests the Execute method of StepExecutor
 func TestStepExecutor_Execute(t *testing.T) {
@@ -839,6 +851,9 @@ func TestStepExecutor_updateEnvironmentFromFiles_PathFileScannerError(t *testing
 // TestStepExecutor_handleUnsupportedAction tests the handleUnsupportedAction method
 func TestStepExecutor_handleUnsupportedAction(t *testing.T) {
 	t.Run("skips step with uses and outputs warning message", func(t *testing.T) {
+		logBuf, cleanup := captureSlog(t)
+		defer cleanup()
+
 		tmpDir := t.TempDir()
 		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
 		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
@@ -882,8 +897,17 @@ func TestStepExecutor_handleUnsupportedAction(t *testing.T) {
 			t.Errorf("StepContext.Outcome = %q, want %q", stepCtx.Outcome, "skipped")
 		}
 
-		// Note: Warning message is now logged via slog.Warn instead of stdout
-		// The important behavior (result marked as skipped) is verified above
+		// Verify slog warning was logged with correct information
+		logOutput := logBuf.String()
+		if !strings.Contains(logOutput, "skipping unsupported action") {
+			t.Error("Log should contain 'skipping unsupported action'")
+		}
+		if !strings.Contains(logOutput, "actions/checkout@v4") {
+			t.Error("Log should contain the action name 'actions/checkout@v4'")
+		}
+		if !strings.Contains(logOutput, "Checkout") {
+			t.Error("Log should contain the step name 'Checkout'")
+		}
 	})
 
 	t.Run("handles step without ID", func(t *testing.T) {
