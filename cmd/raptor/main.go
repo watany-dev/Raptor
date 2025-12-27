@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 
 	"github.com/watany-dev/raptor/internal/cli"
 	"github.com/watany-dev/raptor/internal/executor"
+	"github.com/watany-dev/raptor/internal/logger"
 )
 
 var (
@@ -15,8 +17,9 @@ var (
 )
 
 func main() {
+	logger.Init()
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		slog.Error("execution failed", "error", err)
 		os.Exit(1)
 	}
 }

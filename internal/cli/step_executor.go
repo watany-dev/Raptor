@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -92,12 +93,12 @@ func (se *StepExecutor) Execute(step *workflow.Step, index int, ctx *ExecutionCo
 	if err != nil {
 		if !shouldRun {
 			// Strict mode - evaluator returned false, fail the step
-			_, _ = fmt.Fprintf(se.stderr, "Error: %v\n", err)
+			slog.Error("condition evaluation failed", "step", stepName, "error", err)
 			_, _ = fmt.Fprintf(se.stdout, "::endgroup::\n")
 			return nil, fmt.Errorf("condition evaluation failed: %w", err)
 		}
 		// Permissive mode - evaluator returned true despite error, log warning and continue
-		_, _ = fmt.Fprintf(se.stderr, "Warning: %v\n", err)
+		slog.Warn("condition evaluation warning", "step", stepName, "error", err)
 	}
 
 	if !shouldRun {
@@ -225,15 +226,11 @@ func (se *StepExecutor) updateEnvironmentFromFiles(ctx *ExecutionContext) error 
 	// Update accumulated environment from GITHUB_ENV
 	newEnv, err := envfiles.ParseEnvFile(se.envFilePath)
 	if err != nil {
-		// Print detailed security error message
-		_, _ = fmt.Fprintln(se.stderr, "")
-		_, _ = fmt.Fprintln(se.stderr, "❌ Security Error:")
-		_, _ = fmt.Fprintln(se.stderr, err.Error())
-		_, _ = fmt.Fprintln(se.stderr, "")
-		_, _ = fmt.Fprintln(se.stderr, "This restriction protects your system from potentially malicious workflows.")
-		_, _ = fmt.Fprintln(se.stderr, "See: https://github.com/watany-dev/raptor/blob/main/SECURITY.md")
-		_, _ = fmt.Fprintln(se.stderr, "")
-
+		slog.Error("security validation failed",
+			"error", err,
+			"hint", "This restriction protects your system from potentially malicious workflows",
+			"docs", "https://github.com/watany-dev/raptor/blob/main/SECURITY.md",
+		)
 		return fmt.Errorf("security validation failed: %w", err)
 	}
 	ctx.AccumulatedEnv = runtime.MergeEnv(ctx.AccumulatedEnv, newEnv)

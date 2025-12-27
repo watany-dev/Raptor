@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
@@ -466,6 +467,9 @@ func TestStepExecutor_updateEnvironmentFromFiles(t *testing.T) {
 		stdout := &bytes.Buffer{}
 		stderr := &bytes.Buffer{}
 
+		// Redirect slog output to stderr buffer for testing
+		slog.SetDefault(slog.New(slog.NewTextHandler(stderr, nil)))
+
 		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
 
 		ctx := NewExecutionContext(map[string]string{})
@@ -475,10 +479,10 @@ func TestStepExecutor_updateEnvironmentFromFiles(t *testing.T) {
 			t.Error("updateEnvironmentFromFiles() expected error for blocked env var")
 		}
 
-		// Check that security error message was printed
+		// Check that security error message was logged via slog
 		stderrStr := stderr.String()
-		if !bytes.Contains([]byte(stderrStr), []byte("Security Error")) {
-			t.Error("Expected Security Error message in stderr")
+		if !bytes.Contains([]byte(stderrStr), []byte("security validation failed")) {
+			t.Errorf("Expected 'security validation failed' in stderr, got: %s", stderrStr)
 		}
 	})
 
