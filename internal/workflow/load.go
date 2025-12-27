@@ -47,13 +47,13 @@ func parseWorkflowFromNode(root *yaml.Node) (*WorkflowFile, []string, error) {
 
 // extractJobOrderFromNode extracts job IDs in definition order from a parsed yaml.Node.
 func extractJobOrderFromNode(root *yaml.Node) []string {
-	// root.Content[0] is the document node
-	if len(root.Content) == 0 {
+	if root == nil || len(root.Content) == 0 {
 		return nil
 	}
 
+	// root.Content[0] is the document node
 	doc := root.Content[0]
-	if doc.Kind != yaml.MappingNode {
+	if doc == nil || doc.Kind != yaml.MappingNode {
 		return nil
 	}
 
@@ -62,11 +62,18 @@ func extractJobOrderFromNode(root *yaml.Node) []string {
 		keyNode := doc.Content[i]
 		valueNode := doc.Content[i+1]
 
+		if keyNode == nil || valueNode == nil {
+			continue
+		}
+
 		if keyNode.Value == "jobs" && valueNode.Kind == yaml.MappingNode {
 			// Extract job IDs in order
 			var jobOrder []string
 			for j := 0; j < len(valueNode.Content)-1; j += 2 {
 				jobKeyNode := valueNode.Content[j]
+				if jobKeyNode == nil {
+					continue
+				}
 				jobOrder = append(jobOrder, jobKeyNode.Value)
 			}
 			return jobOrder
