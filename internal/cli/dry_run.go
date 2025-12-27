@@ -57,6 +57,9 @@ func (drf *DryRunFormatter) formatJob(jobID string, job *workflow.Job) *RunResul
 	if job.Name != "" && job.Name != jobID {
 		_, _ = fmt.Fprintf(drf.stdout, "   Name: %s\n", job.Name)
 	}
+	if len(job.Needs) > 0 {
+		_, _ = fmt.Fprintf(drf.stdout, "   Depends on: %s\n", strings.Join(job.Needs, ", "))
+	}
 	if job.RunsOn != "" {
 		_, _ = fmt.Fprintf(drf.stdout, "   Runs-on: %s\n", job.RunsOn)
 	}
