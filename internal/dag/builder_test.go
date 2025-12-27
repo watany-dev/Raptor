@@ -2,6 +2,7 @@ package dag
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/watany-dev/raptor/internal/workflow"
@@ -302,5 +303,77 @@ func TestFormatCycle(t *testing.T) {
 				t.Errorf("formatCycle() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestBuildFromJobs_TooManyJobs(t *testing.T) {
+	// Create a workflow with more than MaxJobs
+	jobs := make(map[string]workflow.Job)
+	for i := 0; i <= MaxJobs; i++ {
+		jobs[fmt.Sprintf("job%d", i)] = workflow.Job{}
+	}
+
+	_, err := BuildFromJobs(jobs)
+	if err == nil {
+		t.Fatal("expected error for too many jobs, got nil")
+	}
+	if !errors.Is(err, ErrTooManyJobs) {
+		t.Errorf("expected ErrTooManyJobs, got %v", err)
+	}
+}
+
+func TestBuildFromJobs_JobNameTooLong(t *testing.T) {
+	// Create a job with a name longer than MaxJobNameLength
+	longName := make([]byte, MaxJobNameLength+1)
+	for i := range longName {
+		longName[i] = 'a'
+	}
+
+	jobs := map[string]workflow.Job{
+		string(longName): {},
+	}
+
+	_, err := BuildFromJobs(jobs)
+	if err == nil {
+		t.Fatal("expected error for job name too long, got nil")
+	}
+	if !errors.Is(err, ErrJobNameTooLong) {
+		t.Errorf("expected ErrJobNameTooLong, got %v", err)
+	}
+}
+
+func TestBuildFromJobs_AtMaxLimit(t *testing.T) {
+	// Create exactly MaxJobs jobs - should succeed
+	jobs := make(map[string]workflow.Job)
+	for i := 0; i < MaxJobs; i++ {
+		jobs[fmt.Sprintf("job%d", i)] = workflow.Job{}
+	}
+
+	g, err := BuildFromJobs(jobs)
+	if err != nil {
+		t.Fatalf("expected success for exactly %d jobs, got %v", MaxJobs, err)
+	}
+	if len(g.nodes) != MaxJobs {
+		t.Errorf("expected %d nodes, got %d", MaxJobs, len(g.nodes))
+	}
+}
+
+func TestBuildFromJobs_JobNameAtMaxLength(t *testing.T) {
+	// Create a job with exactly MaxJobNameLength - should succeed
+	exactName := make([]byte, MaxJobNameLength)
+	for i := range exactName {
+		exactName[i] = 'a'
+	}
+
+	jobs := map[string]workflow.Job{
+		string(exactName): {},
+	}
+
+	g, err := BuildFromJobs(jobs)
+	if err != nil {
+		t.Fatalf("expected success for job name at max length, got %v", err)
+	}
+	if len(g.nodes) != 1 {
+		t.Errorf("expected 1 node, got %d", len(g.nodes))
 	}
 }
