@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -373,6 +374,7 @@ func evalEndsWith(args []Node, ctx *EvaluationContext) (bool, error) {
 
 // evalHashFiles evaluates the hashFiles(pattern...) function.
 // Returns the SHA256 hash of the contents of files matching the patterns.
+// Uses streaming hash to avoid loading all file contents into memory.
 func evalHashFiles(args []Node, ctx *EvaluationContext) (string, error) {
 	if len(args) == 0 {
 		return "", nil
@@ -387,7 +389,9 @@ func evalHashFiles(args []Node, ctx *EvaluationContext) (string, error) {
 		}
 	}
 
-	var allBytes []byte
+	h := sha256.New()
+	hasContent := false
+
 	for _, arg := range args {
 		patternVal, err := evaluateNode(arg, ctx)
 		if err != nil {
@@ -409,20 +413,26 @@ func evalHashFiles(args []Node, ctx *EvaluationContext) (string, error) {
 			if err != nil || info.IsDir() {
 				continue
 			}
-			data, err := os.ReadFile(match)
+
+			f, err := os.Open(match)
 			if err != nil {
 				continue
 			}
-			allBytes = append(allBytes, data...)
+
+			_, err = io.Copy(h, f)
+			f.Close()
+			if err != nil {
+				continue
+			}
+			hasContent = true
 		}
 	}
 
-	if len(allBytes) == 0 {
+	if !hasContent {
 		return "", nil
 	}
 
-	hash := sha256.Sum256(allBytes)
-	return hex.EncodeToString(hash[:]), nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // toBool converts a value to a boolean.
