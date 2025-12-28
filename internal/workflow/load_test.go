@@ -997,4 +997,131 @@ func TestExtractJobOrderFromNode_DirectCall(t *testing.T) {
 			t.Errorf("extractJobOrderFromNode() = %v, want nil for empty node", result)
 		}
 	})
+
+	// Test with nil key node in doc.Content (line 65)
+	t.Run("nil key node in content is skipped", func(t *testing.T) {
+		root := &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						nil, // nil key node
+						{Kind: yaml.ScalarNode, Value: "value"},
+						{Kind: yaml.ScalarNode, Value: "jobs"},
+						{
+							Kind: yaml.MappingNode,
+							Content: []*yaml.Node{
+								{Kind: yaml.ScalarNode, Value: "job1"},
+								{Kind: yaml.MappingNode},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := extractJobOrderFromNode(root)
+		// Should skip the nil key and find "jobs"
+		if len(result) != 1 || result[0] != "job1" {
+			t.Errorf("extractJobOrderFromNode() = %v, want [job1]", result)
+		}
+	})
+
+	// Test with nil value node in doc.Content (line 65)
+	t.Run("nil value node in content is skipped", func(t *testing.T) {
+		root := &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "name"},
+						nil, // nil value node
+						{Kind: yaml.ScalarNode, Value: "jobs"},
+						{
+							Kind: yaml.MappingNode,
+							Content: []*yaml.Node{
+								{Kind: yaml.ScalarNode, Value: "job1"},
+								{Kind: yaml.MappingNode},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := extractJobOrderFromNode(root)
+		// Should skip the nil value and find "jobs"
+		if len(result) != 1 || result[0] != "job1" {
+			t.Errorf("extractJobOrderFromNode() = %v, want [job1]", result)
+		}
+	})
+
+	// Test with nil job key node in jobs.Content (line 74)
+	t.Run("nil job key node is skipped", func(t *testing.T) {
+		root := &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "jobs"},
+						{
+							Kind: yaml.MappingNode,
+							Content: []*yaml.Node{
+								nil, // nil job key node
+								{Kind: yaml.MappingNode},
+								{Kind: yaml.ScalarNode, Value: "job2"},
+								{Kind: yaml.MappingNode},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := extractJobOrderFromNode(root)
+		// Should skip the nil job key and find "job2"
+		if len(result) != 1 || result[0] != "job2" {
+			t.Errorf("extractJobOrderFromNode() = %v, want [job2]", result)
+		}
+	})
+
+	// Test with nil doc node (line 56)
+	t.Run("nil doc node returns nil", func(t *testing.T) {
+		root := &yaml.Node{
+			Kind: yaml.DocumentNode,
+			Content: []*yaml.Node{
+				nil, // nil doc node
+			},
+		}
+		result := extractJobOrderFromNode(root)
+		if result != nil {
+			t.Errorf("extractJobOrderFromNode() = %v, want nil for nil doc node", result)
+		}
+	})
+}
+
+// TestStringOrSlice_UnmarshalYAML_DecodeError tests the error path in UnmarshalYAML
+func TestStringOrSlice_UnmarshalYAML_DecodeError(t *testing.T) {
+	t.Parallel()
+
+	// Test case: needs field with invalid value that cannot be decoded as string slice
+	yamlContent := `name: Test
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    needs:
+      invalid: value
+    steps:
+      - run: echo test`
+
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "invalid_needs.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	if err == nil {
+		t.Error("LoadWorkflowFile() expected error for invalid needs mapping")
+	}
 }

@@ -946,6 +946,101 @@ func TestStepExecutor_handleUnsupportedAction(t *testing.T) {
 	})
 }
 
+// TestStepExecutor_Execute_PermissiveModeWarning tests that permissive mode logs warning but continues
+// This covers lines 100-101 where permissive mode logs warning and continues
+func TestStepExecutor_Execute_PermissiveModeWarning(t *testing.T) {
+	t.Run("logs warning and continues when permissive mode and condition has error", func(t *testing.T) {
+		logBuf, cleanup := captureSlog(t)
+		defer cleanup()
+
+		tmpDir := t.TempDir()
+		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+		mock := newMockExecutor(executor.Result{ExitCode: 0, Stdout: "executed\n"})
+		evaluator := expression.NewConditionEvaluator()
+		evaluator.StrictMode = false // Permissive mode
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+		ctx := NewExecutionContext(map[string]string{})
+
+		// Step with an invalid condition - in permissive mode it should warn and continue
+		step := &workflow.Step{
+			Name: "Step with warning",
+			If:   "${{ unknownFunction() }}",
+			Run:  "echo test",
+		}
+
+		result, err := se.Execute(step, 0, ctx)
+		if err != nil {
+			t.Fatalf("Execute() error = %v; permissive mode should not return error", err)
+		}
+
+		// Step should have been executed (not skipped)
+		if result.Skipped {
+			t.Error("Step should not be skipped in permissive mode")
+		}
+
+		// Executor should have been called
+		if len(mock.calls) != 1 {
+			t.Errorf("Executor should be called once, got %d calls", len(mock.calls))
+		}
+
+		// Warning should be logged
+		logOutput := logBuf.String()
+		if !strings.Contains(logOutput, "condition evaluation warning") {
+			t.Errorf("Log should contain 'condition evaluation warning', got: %s", logOutput)
+		}
+	})
+}
+
+// TestStepExecutor_Execute_StrictModeError tests the strict mode error path in Execute
+// This covers lines 94-98 where strict mode is enabled and evaluation fails
+func TestStepExecutor_Execute_StrictModeError(t *testing.T) {
+	t.Run("returns error when strict mode is enabled and condition evaluation fails", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		envFilePath := filepath.Join(tmpDir, "GITHUB_ENV")
+		pathFilePath := filepath.Join(tmpDir, "GITHUB_PATH")
+
+		mock := newMockExecutor(executor.Result{ExitCode: 0, Stdout: "should not run\n"})
+		evaluator := expression.NewConditionEvaluator()
+		evaluator.StrictMode = true // Enable strict mode
+
+		stdout := &bytes.Buffer{}
+		stderr := &bytes.Buffer{}
+
+		se := NewStepExecutor(mock, evaluator, stdout, stderr, tmpDir, envFilePath, pathFilePath)
+
+		ctx := NewExecutionContext(map[string]string{})
+
+		// Step with an invalid condition that will fail parsing in strict mode
+		// Using an unknown function will cause a parse/evaluation error
+		step := &workflow.Step{
+			Name: "Failing Step",
+			If:   "${{ unknownFunction() }}",
+			Run:  "echo test",
+		}
+
+		_, err := se.Execute(step, 0, ctx)
+		if err == nil {
+			t.Error("Execute() expected error in strict mode when condition evaluation fails")
+		}
+
+		if !strings.Contains(err.Error(), "condition evaluation failed") {
+			t.Errorf("Error should contain 'condition evaluation failed', got: %v", err)
+		}
+
+		// Executor should not have been called since condition evaluation failed
+		if len(mock.calls) != 0 {
+			t.Errorf("Executor should not be called when condition fails, got %d calls", len(mock.calls))
+		}
+	})
+}
+
 // TestStepExecutor_Execute_UsesStep tests that Execute correctly skips steps with uses
 func TestStepExecutor_Execute_UsesStep(t *testing.T) {
 	t.Run("skips step with uses field", func(t *testing.T) {

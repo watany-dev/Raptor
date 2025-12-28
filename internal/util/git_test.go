@@ -3,6 +3,7 @@ package util
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -182,6 +183,72 @@ func TestGitHeadRef_DefaultBranch(t *testing.T) {
 	// ref may be empty in detached HEAD state, which is acceptable
 	// Just verify the function doesn't error
 	t.Logf("GitHeadRef() returned: %q (length: %d)", ref, len(ref))
+}
+
+// TestGitHeadRef_DetachedHead tests GitHeadRef returns empty string for detached HEAD
+func TestGitHeadRef_DetachedHead(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Initialize a new git repository
+	ctx := context.Background()
+	cmd := exec.CommandContext(ctx, "git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+
+	// Configure git user for the commit
+	cmd = exec.CommandContext(ctx, "git", "config", "user.email", "test@test.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to config git: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, "git", "config", "user.name", "Test")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to config git: %v", err)
+	}
+
+	// Create a file and commit it
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, "git", "add", ".")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to git add: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, "git", "commit", "--no-gpg-sign", "-m", "initial")
+	cmd.Dir = tmpDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to git commit: %v, output: %s", err, output)
+	}
+
+	// Get the commit SHA
+	sha, err := GitHeadSHA(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("failed to get HEAD SHA: %v", err)
+	}
+
+	// Detach HEAD by checking out the commit SHA directly
+	cmd = exec.CommandContext(ctx, "git", "checkout", sha)
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to checkout detached HEAD: %v", err)
+	}
+
+	// Now GitHeadRef should return empty string (detached HEAD)
+	ref, err := GitHeadRef(ctx, tmpDir)
+	if err != nil {
+		t.Errorf("GitHeadRef() error = %v; expected no error for detached HEAD", err)
+	}
+	if ref != "" {
+		t.Errorf("GitHeadRef() = %q; expected empty string for detached HEAD", ref)
+	}
 }
 
 // TestFindGitRoot_MultipleDirectories tests finding git root from nested directories
