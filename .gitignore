@@ -3,6 +3,7 @@
 #
 # Binaries for programs and plugins
 bin/
+raptor
 *.exe
 *.exe~
 *.dll
