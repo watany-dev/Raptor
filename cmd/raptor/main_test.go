@@ -421,3 +421,69 @@ jobs:
 		t.Error("runCommand() should error when a job fails")
 	}
 }
+
+// TestMain_Direct tests the main function directly by manipulating os.Args
+// This covers the main() entry point for success paths
+func TestMain_Direct(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+
+	// Test with help command (doesn't call os.Exit)
+	os.Args = []string{"raptor", "help"}
+	main()
+
+	// Test with version command (doesn't call os.Exit)
+	os.Args = []string{"raptor", "version"}
+	main()
+
+	// Test with no args (doesn't call os.Exit)
+	os.Args = []string{"raptor"}
+	main()
+}
+
+// TestMainCore tests the mainCore function which contains the main entry point logic
+func TestMainCore(t *testing.T) {
+	t.Run("success with no args", func(t *testing.T) {
+		exitCode := -1
+		mockExit := func(code int) { exitCode = code }
+
+		mainCore([]string{}, mockExit)
+
+		if exitCode != -1 {
+			t.Errorf("expected no exit call, but got exit code %d", exitCode)
+		}
+	})
+
+	t.Run("success with help command", func(t *testing.T) {
+		exitCode := -1
+		mockExit := func(code int) { exitCode = code }
+
+		mainCore([]string{"help"}, mockExit)
+
+		if exitCode != -1 {
+			t.Errorf("expected no exit call, but got exit code %d", exitCode)
+		}
+	})
+
+	t.Run("failure with unknown command", func(t *testing.T) {
+		exitCode := -1
+		mockExit := func(code int) { exitCode = code }
+
+		mainCore([]string{"unknown"}, mockExit)
+
+		if exitCode != 1 {
+			t.Errorf("expected exit code 1, got %d", exitCode)
+		}
+	})
+
+	t.Run("failure with missing workflow", func(t *testing.T) {
+		exitCode := -1
+		mockExit := func(code int) { exitCode = code }
+
+		mainCore([]string{"run"}, mockExit)
+
+		if exitCode != 1 {
+			t.Errorf("expected exit code 1, got %d", exitCode)
+		}
+	})
+}
