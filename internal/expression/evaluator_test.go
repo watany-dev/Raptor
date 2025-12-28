@@ -736,3 +736,76 @@ func TestStrictMode(t *testing.T) {
 		})
 	}
 }
+
+// TestEvaluateNode_UnknownNodeType tests the error path for unknown node types
+func TestEvaluateNode_UnknownNodeType(t *testing.T) {
+	// Create a custom type that implements Node but is not handled
+	ctx := &EvaluationContext{
+		Env:        nil,
+		JobSuccess: true,
+	}
+
+	// Pass nil node - this should trigger the default case
+	_, err := evaluateNode(nil, ctx)
+	if err == nil {
+		t.Error("evaluateNode() expected error for nil node")
+	}
+}
+
+// TestEvaluateUnary_UnknownOperator tests the error path for unknown unary operators
+func TestEvaluateUnary_UnknownOperator(t *testing.T) {
+	ctx := &EvaluationContext{
+		Env:        nil,
+		JobSuccess: true,
+	}
+
+	// Create an UnaryExpr with an unknown operator
+	unary := &UnaryExpr{
+		Operator: TokenType(999), // Unknown operator
+		Operand:  &BoolLiteral{Value: true},
+	}
+
+	_, err := evaluateUnary(unary, ctx)
+	if err == nil {
+		t.Error("evaluateUnary() expected error for unknown operator")
+	}
+}
+
+// TestEvaluateBinary_UnknownOperator tests the error path for unknown binary operators
+func TestEvaluateBinary_UnknownOperator(t *testing.T) {
+	ctx := &EvaluationContext{
+		Env:        nil,
+		JobSuccess: true,
+	}
+
+	// Create a BinaryExpr with an unknown operator
+	binary := &BinaryExpr{
+		Operator: TokenType(999), // Unknown operator
+		Left:     &BoolLiteral{Value: true},
+		Right:    &BoolLiteral{Value: false},
+	}
+
+	_, err := evaluateBinary(binary, ctx)
+	if err == nil {
+		t.Error("evaluateBinary() expected error for unknown operator")
+	}
+}
+
+// TestResolveIdentifier_NilEnv tests env.VAR resolution when ctx.Env is nil
+func TestResolveIdentifier_NilEnv(t *testing.T) {
+	ctx := &EvaluationContext{
+		Env:        nil, // nil environment
+		JobSuccess: true,
+	}
+
+	// Resolve env.VAR when Env is nil
+	result, err := resolveIdentifier("env.MY_VAR", ctx)
+	if err != nil {
+		t.Errorf("resolveIdentifier() error = %v", err)
+	}
+
+	// Should return empty string
+	if result != "" {
+		t.Errorf("resolveIdentifier() = %v, want empty string", result)
+	}
+}
