@@ -7,6 +7,13 @@ import (
 	"strings"
 )
 
+// These variables can be overridden in tests for error simulation
+var (
+	filepathRel          = filepath.Rel
+	filepathEvalSymlinks = filepath.EvalSymlinks
+	osLstat              = os.Lstat
+)
+
 // ValidateWorkingDirectory validates that a working directory is safe.
 // It ensures:
 // - No absolute paths
@@ -38,7 +45,7 @@ func ValidateWorkingDirectory(workDir, basePath string) error {
 	fullPath := filepath.Join(basePath, cleanPath)
 
 	// 4. Ensure path stays within basePath
-	relPath, err := filepath.Rel(basePath, fullPath)
+	relPath, err := filepathRel(basePath, fullPath)
 	if err != nil || strings.HasPrefix(relPath, "..") {
 		return fmt.Errorf(
 			"working-directory must be within the workspace: %q",
@@ -63,7 +70,7 @@ func ValidatePathWithSymlinkResolution(path, basePath string) error {
 	fullPath := filepath.Join(basePath, path)
 
 	// Check if the path exists
-	_, err := os.Lstat(fullPath)
+	_, err := osLstat(fullPath)
 	if os.IsNotExist(err) {
 		// Path doesn't exist yet, can't check symlinks
 		// This is acceptable for paths that will be created
@@ -74,20 +81,20 @@ func ValidatePathWithSymlinkResolution(path, basePath string) error {
 	}
 
 	// Resolve all symlinks to get the real path
-	realPath, err := filepath.EvalSymlinks(fullPath)
+	realPath, err := filepathEvalSymlinks(fullPath)
 	if err != nil {
 		// If EvalSymlinks fails (e.g., broken symlink), treat it as an error
 		return fmt.Errorf("failed to resolve symlinks: %w", err)
 	}
 
 	// Resolve basePath symlinks as well for accurate comparison
-	realBasePath, err := filepath.EvalSymlinks(basePath)
+	realBasePath, err := filepathEvalSymlinks(basePath)
 	if err != nil {
 		return fmt.Errorf("failed to resolve base path symlinks: %w", err)
 	}
 
 	// Ensure the resolved path is within the workspace
-	relPath, err := filepath.Rel(realBasePath, realPath)
+	relPath, err := filepathRel(realBasePath, realPath)
 	if err != nil {
 		return fmt.Errorf(
 			"symlink target escapes workspace: resolved path %q cannot be made relative to %q",
