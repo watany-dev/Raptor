@@ -87,3 +87,80 @@ jobs:
 
       - name: Build
         run: go build -v ./...
+
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    needs: [build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build binary
+        run: go build -o raptor ./cmd/raptor
+
+      - name: Test - No arguments (shows help)
+        run: |
+          OUTPUT=$(./raptor 2>&1) || true
+          echo "$OUTPUT"
+          echo "$OUTPUT" | grep -q "Usage: raptor"
+
+      - name: Test - help command
+        run: |
+          ./raptor help | grep -q "Usage: raptor"
+
+      - name: Test - -h flag
+        run: |
+          ./raptor -h | grep -q "Usage: raptor"
+
+      - name: Test - --help flag
+        run: |
+          ./raptor --help | grep -q "Usage: raptor"
+
+      - name: Test - version command
+        run: |
+          ./raptor version | grep -q "raptor"
+
+      - name: Test - -v flag
+        run: |
+          ./raptor -v | grep -q "raptor"
+
+      - name: Test - --version flag
+        run: |
+          ./raptor --version | grep -q "raptor"
+
+      - name: Test - unknown command (should fail)
+        run: |
+          if ./raptor unknown-command 2>&1; then
+            echo "Expected failure but got success"
+            exit 1
+          fi
+          ./raptor unknown-command 2>&1 | grep -q "unknown command"
+
+      - name: Test - dry-run mode (without run command)
+        run: |
+          ./raptor -w testdata/workflows/simple.yml 2>&1 | grep -q -E "(dry-run|Dry-run|DRY)"
+
+      - name: Test - run with dry-run flag
+        run: |
+          ./raptor run -w testdata/workflows/simple.yml -n 2>&1
+
+      - name: Test - run with --dry-run flag
+        run: |
+          ./raptor run -w testdata/workflows/simple.yml --dry-run 2>&1
+
+      - name: Test - run specific job with dry-run
+        run: |
+          ./raptor run -w testdata/workflows/multi-job.yml -j build -n 2>&1
+
+      - name: Test - missing workflow flag (should fail)
+        run: |
+          if ./raptor run 2>&1; then
+            echo "Expected failure but got success"
+            exit 1
+          fi
+          ./raptor run 2>&1 | grep -q -E "(workflow|required)"
