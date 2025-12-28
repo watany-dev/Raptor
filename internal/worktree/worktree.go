@@ -9,6 +9,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/watany-dev/raptor/internal/util"
 )
 
 const (
@@ -23,9 +25,10 @@ const (
 // If verified is true, skips git repository verification (use when caller has already verified).
 func CreateWorkspace(ctx context.Context, repoRoot string, verified bool) (*Workspace, error) {
 	// Verify this is a git repository (skip if already verified by caller)
+	// Uses util.FindGitRoot to avoid duplicating git command logic
 	if !verified {
-		if err := verifyGitRepo(ctx, repoRoot); err != nil {
-			return nil, err
+		if _, err := util.FindGitRoot(ctx, repoRoot); err != nil {
+			return nil, fmt.Errorf("not a git repository: %w", err)
 		}
 	}
 
@@ -90,20 +93,6 @@ func RemoveWorkspace(ctx context.Context, ws *Workspace) error {
 	return nil
 }
 
-// verifyGitRepo checks if the given path is a valid git repository.
-func verifyGitRepo(ctx context.Context, path string) error {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--git-dir")
-	cmd.Dir = path
-
-	var stderr strings.Builder
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("not a git repository (%s): %w", strings.TrimSpace(stderr.String()), err)
-	}
-
-	return nil
-}
 
 // randReader is the random reader used for generating IDs.
 // It can be replaced in tests to simulate errors.

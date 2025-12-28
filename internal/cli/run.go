@@ -197,7 +197,8 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 	noopCleanup := func() {}
 
 	// All workflows run in isolated git worktrees for security
-	repoRoot, err := util.FindGitRoot(ctx, opts.WorkingDir)
+	// Use GetGitRepoInfo to get all git info in optimized fewer subprocess calls
+	gitInfo, err := util.GetGitRepoInfo(ctx, opts.WorkingDir)
 	if err != nil {
 		return nil, noopCleanup, fmt.Errorf(
 			"not a git repository: %w\n"+
@@ -207,17 +208,13 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 		)
 	}
 
-	// Pass verified=true since FindGitRoot already confirmed this is a git repository
-	ws, err := worktree.CreateWorkspace(ctx, repoRoot, true)
+	// Pass verified=true since GetGitRepoInfo already confirmed this is a git repository
+	ws, err := worktree.CreateWorkspace(ctx, gitInfo.Root, true)
 	if err != nil {
 		return nil, noopCleanup, fmt.Errorf("failed to create workspace: %w", err)
 	}
 
 	slog.Info("created isolated workspace", "path", ws.Path)
-
-	// Get git info from original repo
-	sha, _ := util.GitHeadSHA(ctx, repoRoot)
-	ref, _ := util.GitHeadRef(ctx, repoRoot)
 
 	cleanup := func() {
 		if err := worktree.RemoveWorkspace(ctx, ws); err != nil {
@@ -229,9 +226,9 @@ func (r *Runner) setupRunContext(ctx context.Context, opts *RunOptions) (*runCon
 
 	return &runContext{
 		workDir:   ws.Path,
-		repoRoot:  repoRoot,
-		sha:       sha,
-		ref:       ref,
+		repoRoot:  gitInfo.Root,
+		sha:       gitInfo.HeadSHA,
+		ref:       gitInfo.HeadRef,
 		workspace: ws,
 	}, cleanup, nil
 }
