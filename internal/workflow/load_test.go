@@ -1099,3 +1099,29 @@ func TestExtractJobOrderFromNode_DirectCall(t *testing.T) {
 		}
 	})
 }
+
+// TestStringOrSlice_UnmarshalYAML_DecodeError tests the error path in UnmarshalYAML
+func TestStringOrSlice_UnmarshalYAML_DecodeError(t *testing.T) {
+	t.Parallel()
+
+	// Test case: needs field with invalid value that cannot be decoded as string slice
+	yamlContent := `name: Test
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    needs:
+      invalid: value
+    steps:
+      - run: echo test`
+
+	tmpDir := t.TempDir()
+	workflowPath := filepath.Join(tmpDir, "invalid_needs.yml")
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+
+	_, err := LoadWorkflowFile(workflowPath)
+	if err == nil {
+		t.Error("LoadWorkflowFile() expected error for invalid needs mapping")
+	}
+}
