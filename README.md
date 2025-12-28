@@ -57,12 +57,6 @@ sudo mv raptor /usr/local/bin/
 raptor --version
 ```
 
-#### Windows (x86_64)
-
-1. Download [raptor_0.2.0_Windows_x86_64.zip](https://github.com/watany-dev/raptor/releases/download/v0.2.0/raptor_0.2.0_Windows_x86_64.zip)
-2. Extract the ZIP file
-3. Place `raptor.exe` in a directory in your PATH
-
 ### Go install
 
 ```bash
@@ -80,6 +74,7 @@ sudo mv raptor /usr/local/bin/
 
 ### Requirements
 
+- **Supported platforms**: Linux, macOS (Windows is not supported)
 - Runtime: Git 2.5 or later
 - Build from source only: Go 1.24 or later
 
