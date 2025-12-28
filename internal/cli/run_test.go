@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/watany-dev/raptor/internal/executor"
+	"github.com/watany-dev/raptor/internal/workflow"
 )
 
 // setupTestGitRepo creates a minimal git repository for testing.
@@ -1531,5 +1532,38 @@ jobs:
 
 	if !strings.Contains(err.Error(), "nonexistent") {
 		t.Errorf("Error should mention nonexistent dependency, got: %v", err)
+	}
+}
+
+// TestRunner_shouldSkipJob_DependencyNotExecuted tests the edge case where
+// a dependency job was not executed (defensive programming branch)
+func TestRunner_shouldSkipJob_DependencyNotExecuted(t *testing.T) {
+	t.Parallel()
+
+	runner := NewRunner(newMockExecutor())
+
+	// Create a job that depends on "missing_job"
+	job := &workflow.Job{
+		Needs: []string{"missing_job"},
+	}
+
+	// Create runContext with empty jobResults (no jobs executed yet)
+	runCtx := &runContext{
+		jobResults: make(map[string]*RunResult),
+	}
+
+	// Call shouldSkipJob - should return true because dependency was not executed
+	shouldSkip, reason := runner.shouldSkipJob(job, runCtx)
+
+	if !shouldSkip {
+		t.Error("shouldSkipJob() should return true when dependency was not executed")
+	}
+
+	if !strings.Contains(reason, "missing_job") {
+		t.Errorf("reason should mention 'missing_job', got: %s", reason)
+	}
+
+	if !strings.Contains(reason, "was not executed") {
+		t.Errorf("reason should mention 'was not executed', got: %s", reason)
 	}
 }
