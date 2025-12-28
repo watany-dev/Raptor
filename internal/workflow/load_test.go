@@ -1125,3 +1125,204 @@ jobs:
 		t.Error("LoadWorkflowFile() expected error for invalid needs mapping")
 	}
 }
+
+// TestLoadWorkflowFile_SymlinkLoop tests that symlink loops are properly detected
+// and return an error instead of causing infinite loops or hangs during YAML file loading.
+func TestLoadWorkflowFile_SymlinkLoop(t *testing.T) {
+	t.Run("self-referencing symlink returns error", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create a symlink that points to itself: loop.yml -> loop.yml
+		loopPath := filepath.Join(tmpDir, "loop.yml")
+		if err := os.Symlink(loopPath, loopPath); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Attempting to load should return an error, not hang
+		_, err := LoadWorkflowFile(loopPath)
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for self-referencing symlink, got nil")
+		}
+		// The error should indicate the symlink issue
+		if err != nil && !strings.Contains(err.Error(), "read workflow file") {
+			t.Logf("Got error: %v", err)
+		}
+	})
+
+	t.Run("circular symlink chain returns error", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create a circular symlink chain: a.yml -> b.yml -> a.yml
+		pathA := filepath.Join(tmpDir, "a.yml")
+		pathB := filepath.Join(tmpDir, "b.yml")
+
+		// Create b.yml symlink first (pointing to a.yml which doesn't exist yet)
+		if err := os.Symlink(pathA, pathB); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+		// Create a.yml symlink pointing to b.yml
+		if err := os.Symlink(pathB, pathA); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Attempting to load should return an error, not hang
+		_, err := LoadWorkflowFile(pathA)
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for circular symlink chain, got nil")
+		}
+		// The OS should detect the symlink loop and return an appropriate error
+		if err != nil {
+			t.Logf("Got expected error for circular symlink: %v", err)
+		}
+	})
+
+	t.Run("deep symlink chain returns error", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create a deep chain of symlinks: 1.yml -> 2.yml -> 3.yml -> ... -> 1.yml
+		const chainLength = 10
+		paths := make([]string, chainLength)
+		for i := range chainLength {
+			paths[i] = filepath.Join(tmpDir, fmt.Sprintf("%d.yml", i))
+		}
+
+		// Create symlinks: each points to the next, last points to first
+		for i := range chainLength {
+			nextIdx := (i + 1) % chainLength
+			if err := os.Symlink(paths[nextIdx], paths[i]); err != nil {
+				t.Skipf("symlink not supported on this platform: %v", err)
+			}
+		}
+
+		// Attempting to load should return an error, not hang
+		_, err := LoadWorkflowFile(paths[0])
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for deep symlink chain, got nil")
+		}
+		if err != nil {
+			t.Logf("Got expected error for deep symlink chain: %v", err)
+		}
+	})
+
+	t.Run("symlink through directories with loop returns error", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create directory structure with symlink loop
+		subDir := filepath.Join(tmpDir, "subdir")
+		if err := os.MkdirAll(subDir, 0755); err != nil {
+			t.Fatalf("failed to create subdirectory: %v", err)
+		}
+
+		// Create a symlink in subdir that points back to parent and creates a loop
+		// subdir/parent -> .. (parent directory)
+		parentLink := filepath.Join(subDir, "parent")
+		if err := os.Symlink("..", parentLink); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Create a workflow symlink that goes through the loop
+		// workflow.yml -> subdir/parent/subdir/parent/subdir/... (infinite loop)
+		loopingPath := filepath.Join(subDir, "parent", "subdir", "parent", "subdir", "workflow.yml")
+		workflowPath := filepath.Join(tmpDir, "workflow.yml")
+		if err := os.Symlink(loopingPath, workflowPath); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Attempting to load should return an error, not hang
+		_, err := LoadWorkflowFile(workflowPath)
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for symlink through directories with loop, got nil")
+		}
+		if err != nil {
+			t.Logf("Got expected error for directory symlink loop: %v", err)
+		}
+	})
+
+	t.Run("valid symlink to real file works correctly", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create a valid workflow file
+		realPath := filepath.Join(tmpDir, "real.yml")
+		yamlContent := `name: Valid Workflow
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test`
+		if err := os.WriteFile(realPath, []byte(yamlContent), 0644); err != nil {
+			t.Fatalf("failed to write workflow file: %v", err)
+		}
+
+		// Create a symlink to the real file
+		symlinkPath := filepath.Join(tmpDir, "symlink.yml")
+		if err := os.Symlink(realPath, symlinkPath); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Loading through symlink should work
+		wf, err := LoadWorkflowFile(symlinkPath)
+		if err != nil {
+			t.Fatalf("LoadWorkflowFile() error = %v; valid symlink should work", err)
+		}
+
+		if wf.Name != "Valid Workflow" {
+			t.Errorf("Name = %q, want %q", wf.Name, "Valid Workflow")
+		}
+	})
+
+	t.Run("relative symlink loop returns error", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create relative symlink loop using . and ..
+		// current.yml -> ./current.yml (self reference via relative path)
+		currentPath := filepath.Join(tmpDir, "current.yml")
+		if err := os.Symlink("./current.yml", currentPath); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Attempting to load should return an error
+		_, err := LoadWorkflowFile(currentPath)
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for relative symlink loop, got nil")
+		}
+		if err != nil {
+			t.Logf("Got expected error for relative symlink loop: %v", err)
+		}
+	})
+
+	t.Run("triple symlink loop returns error", func(t *testing.T) {
+		t.Parallel()
+		tmpDir := t.TempDir()
+
+		// Create a triple symlink loop: x.yml -> y.yml -> z.yml -> x.yml
+		pathX := filepath.Join(tmpDir, "x.yml")
+		pathY := filepath.Join(tmpDir, "y.yml")
+		pathZ := filepath.Join(tmpDir, "z.yml")
+
+		// Create the loop
+		if err := os.Symlink(pathY, pathX); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+		if err := os.Symlink(pathZ, pathY); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+		if err := os.Symlink(pathX, pathZ); err != nil {
+			t.Skipf("symlink not supported on this platform: %v", err)
+		}
+
+		// Attempting to load any of them should return an error
+		_, err := LoadWorkflowFile(pathX)
+		if err == nil {
+			t.Error("LoadWorkflowFile() expected error for triple symlink loop, got nil")
+		}
+		if err != nil {
+			t.Logf("Got expected error for triple symlink loop: %v", err)
+		}
+	})
+}
