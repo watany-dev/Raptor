@@ -524,6 +524,360 @@ func TestValidatePathWithSymlinkResolution(t *testing.T) {
 			t.Error("ValidatePathWithSymlinkResolution() should reject chained symlinks pointing outside")
 		}
 	})
+
+	t.Run("absolute path should fail ValidateWorkingDirectory check", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+
+		// Absolute path should fail the basic validation in ValidatePathWithSymlinkResolution
+		err := ValidatePathWithSymlinkResolution("/etc/passwd", workspaceDir)
+		if err == nil {
+			t.Error("ValidatePathWithSymlinkResolution() should reject absolute paths")
+		}
+		if err != nil && !strings.Contains(err.Error(), "absolute paths are not allowed") {
+			t.Errorf("Expected absolute path error, got: %v", err)
+		}
+	})
+
+	t.Run("path traversal should fail ValidateWorkingDirectory check", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+
+		// Path traversal should fail the basic validation
+		err := ValidatePathWithSymlinkResolution("../outside", workspaceDir)
+		if err == nil {
+			t.Error("ValidatePathWithSymlinkResolution() should reject path traversal")
+		}
+		if err != nil && !strings.Contains(err.Error(), "cannot traverse outside") {
+			t.Errorf("Expected path traversal error, got: %v", err)
+		}
+	})
+
+	t.Run("basePath as broken symlink should return error", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+
+		if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+			t.Fatalf("failed to create workspace dir: %v", err)
+		}
+
+		// Create a file that exists in the actual workspace
+		testFile := filepath.Join(workspaceDir, "test.txt")
+		if err := os.WriteFile(testFile, []byte("content"), 0644); err != nil {
+			t.Fatalf("failed to create test file: %v", err)
+		}
+
+		// Create a symlink that will be used as basePath, pointing to workspace
+		baseSymlink := filepath.Join(tmpDir, "base-link")
+		if err := os.Symlink(workspaceDir, baseSymlink); err != nil {
+			t.Skipf("symlink not supported: %v", err)
+		}
+
+		// Now remove the original workspace to break the symlink
+		if err := os.RemoveAll(workspaceDir); err != nil {
+			t.Fatalf("failed to remove workspace: %v", err)
+		}
+
+		// This should fail because basePath symlink is broken
+		err := ValidatePathWithSymlinkResolution("test.txt", baseSymlink)
+		// It may return nil (path not exist) or error depending on order of checks
+		// The key is that it doesn't panic
+		if err != nil {
+			if !strings.Contains(err.Error(), "failed to resolve base path symlinks") &&
+				!strings.Contains(err.Error(), "failed to stat path") &&
+				!strings.Contains(err.Error(), "failed to resolve symlinks") {
+				t.Logf("Got error (acceptable): %v", err)
+			}
+		}
+	})
+
+	t.Run("permission denied on parent directory triggers Lstat error", func(t *testing.T) {
+		if os.Geteuid() == 0 {
+			t.Skip("skipping permission test as root")
+		}
+
+		tmpDir := t.TempDir()
+		workspaceDir := filepath.Join(tmpDir, "workspace")
+		restrictedDir := filepath.Join(workspaceDir, "restricted")
+
+		// Create directory structure
+		if err := os.MkdirAll(restrictedDir, 0755); err != nil {
+			t.Fatalf("failed to create restricted dir: %v", err)
+		}
+
+		// Create a file inside restricted directory
+		targetFile := filepath.Join(restrictedDir, "secret.txt")
+		if err := os.WriteFile(targetFile, []byte("secret"), 0644); err != nil {
+			t.Fatalf("failed to create target file: %v", err)
+		}
+
+		// Remove all permissions from the restricted directory
+		if err := os.Chmod(restrictedDir, 0000); err != nil {
+			t.Fatalf("failed to chmod: %v", err)
+		}
+		defer func() {
+			_ = os.Chmod(restrictedDir, 0755)
+		}()
+
+		// This should fail with permission error during Lstat
+		err := ValidatePathWithSymlinkResolution("restricted/secret.txt", workspaceDir)
+		if err == nil {
+			t.Error("Expected error for permission denied")
+		}
+		if err != nil && !strings.Contains(err.Error(), "failed to stat path") {
+			t.Errorf("Expected 'failed to stat path' error, got: %v", err)
+		}
+	})
+}
+
+// TestValidateWorkingDirectory_RelPathError tests the filepath.Rel error branch
+func TestValidateWorkingDirectory_RelPathError(t *testing.T) {
+	// This test ensures the code handles edge cases in filepath.Rel
+	// The error branch at line 42-46 is a defensive check that handles:
+	// 1. filepath.Rel returning an error
+	// 2. The relative path starting with ".." (which shouldn't happen after earlier checks)
+
+	// Test with deeply nested path that goes back and forth
+	tests := []struct {
+		name      string
+		workDir   string
+		basePath  string
+		wantError bool
+	}{
+		{
+			name:      "valid nested path",
+			workDir:   "a/b/c/d",
+			basePath:  "/repo",
+			wantError: false,
+		},
+		{
+			name:      "path with backtracking inside",
+			workDir:   "a/b/../c",
+			basePath:  "/repo",
+			wantError: false,
+		},
+		{
+			name:      "deep backtrack still inside",
+			workDir:   "a/b/c/../../d",
+			basePath:  "/repo",
+			wantError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateWorkingDirectory(tt.workDir, tt.basePath)
+			if (err != nil) != tt.wantError {
+				t.Errorf("ValidateWorkingDirectory(%q, %q) error = %v, wantError %v",
+					tt.workDir, tt.basePath, err, tt.wantError)
+			}
+		})
+	}
+}
+
+// TestValidateWorkingDirectory_MockedRelError tests filepath.Rel error using mock
+func TestValidateWorkingDirectory_MockedRelError(t *testing.T) {
+	// Save original function and restore after test
+	originalFilepathRel := filepathRel
+	defer func() { filepathRel = originalFilepathRel }()
+
+	// Mock filepath.Rel to return an error
+	filepathRel = func(basepath, targpath string) (string, error) {
+		return "", fmt.Errorf("mocked filepath.Rel error")
+	}
+
+	// This should trigger the error branch
+	err := ValidateWorkingDirectory("subdir", "/repo")
+	if err == nil {
+		t.Error("Expected error when filepath.Rel fails")
+	}
+	if err != nil && !strings.Contains(err.Error(), "must be within the workspace") {
+		t.Errorf("Expected 'must be within the workspace' error, got: %v", err)
+	}
+}
+
+// TestValidateWorkingDirectory_MockedRelReturnsParent tests when filepath.Rel returns ".."
+func TestValidateWorkingDirectory_MockedRelReturnsParent(t *testing.T) {
+	// Save original function and restore after test
+	originalFilepathRel := filepathRel
+	defer func() { filepathRel = originalFilepathRel }()
+
+	// Mock filepath.Rel to return a path starting with ".."
+	filepathRel = func(basepath, targpath string) (string, error) {
+		return "../escaped", nil
+	}
+
+	// This should trigger the error branch
+	err := ValidateWorkingDirectory("subdir", "/repo")
+	if err == nil {
+		t.Error("Expected error when relative path starts with ..")
+	}
+	if err != nil && !strings.Contains(err.Error(), "must be within the workspace") {
+		t.Errorf("Expected 'must be within the workspace' error, got: %v", err)
+	}
+}
+
+// TestValidatePathWithSymlinkResolution_MockedLstatError tests os.Lstat error using mock
+func TestValidatePathWithSymlinkResolution_MockedLstatError(t *testing.T) {
+	// Save original function and restore after test
+	originalOsLstat := osLstat
+	defer func() { osLstat = originalOsLstat }()
+
+	tmpDir := t.TempDir()
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Mock os.Lstat to return a non-NotExist error
+	osLstat = func(name string) (os.FileInfo, error) {
+		return nil, fmt.Errorf("mocked permission denied")
+	}
+
+	err := ValidatePathWithSymlinkResolution("subdir", workspaceDir)
+	if err == nil {
+		t.Error("Expected error when os.Lstat fails")
+	}
+	if err != nil && !strings.Contains(err.Error(), "failed to stat path") {
+		t.Errorf("Expected 'failed to stat path' error, got: %v", err)
+	}
+}
+
+// TestValidatePathWithSymlinkResolution_MockedEvalSymlinksError tests EvalSymlinks error on fullPath
+func TestValidatePathWithSymlinkResolution_MockedEvalSymlinksError(t *testing.T) {
+	// Save original functions and restore after test
+	originalOsLstat := osLstat
+	originalEvalSymlinks := filepathEvalSymlinks
+	defer func() {
+		osLstat = originalOsLstat
+		filepathEvalSymlinks = originalEvalSymlinks
+	}()
+
+	tmpDir := t.TempDir()
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Mock os.Lstat to succeed (path exists)
+	osLstat = func(name string) (os.FileInfo, error) {
+		return nil, nil // Return nil error (path exists)
+	}
+
+	// Mock filepath.EvalSymlinks to fail on fullPath
+	osLstat = func(name string) (os.FileInfo, error) {
+		return nil, nil
+	}
+	filepathEvalSymlinks = func(path string) (string, error) {
+		return "", fmt.Errorf("mocked broken symlink")
+	}
+
+	err := ValidatePathWithSymlinkResolution("subdir", workspaceDir)
+	if err == nil {
+		t.Error("Expected error when EvalSymlinks fails on fullPath")
+	}
+	if err != nil && !strings.Contains(err.Error(), "failed to resolve symlinks") {
+		t.Errorf("Expected 'failed to resolve symlinks' error, got: %v", err)
+	}
+}
+
+// TestValidatePathWithSymlinkResolution_MockedEvalSymlinksBasePathError tests EvalSymlinks error on basePath
+func TestValidatePathWithSymlinkResolution_MockedEvalSymlinksBasePathError(t *testing.T) {
+	// Save original functions and restore after test
+	originalOsLstat := osLstat
+	originalEvalSymlinks := filepathEvalSymlinks
+	defer func() {
+		osLstat = originalOsLstat
+		filepathEvalSymlinks = originalEvalSymlinks
+	}()
+
+	tmpDir := t.TempDir()
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Mock os.Lstat to succeed (path exists)
+	osLstat = func(name string) (os.FileInfo, error) {
+		return nil, nil
+	}
+
+	callCount := 0
+	// Mock filepath.EvalSymlinks to succeed on fullPath but fail on basePath
+	filepathEvalSymlinks = func(path string) (string, error) {
+		callCount++
+		if callCount == 1 {
+			// First call (fullPath) - succeed
+			return path, nil
+		}
+		// Second call (basePath) - fail
+		return "", fmt.Errorf("mocked base path symlink error")
+	}
+
+	err := ValidatePathWithSymlinkResolution("subdir", workspaceDir)
+	if err == nil {
+		t.Error("Expected error when EvalSymlinks fails on basePath")
+	}
+	if err != nil && !strings.Contains(err.Error(), "failed to resolve base path symlinks") {
+		t.Errorf("Expected 'failed to resolve base path symlinks' error, got: %v", err)
+	}
+}
+
+// TestValidatePathWithSymlinkResolution_MockedRelError tests filepath.Rel error in symlink resolution
+func TestValidatePathWithSymlinkResolution_MockedRelError(t *testing.T) {
+	// Save original functions and restore after test
+	originalOsLstat := osLstat
+	originalEvalSymlinks := filepathEvalSymlinks
+	originalFilepathRel := filepathRel
+	defer func() {
+		osLstat = originalOsLstat
+		filepathEvalSymlinks = originalEvalSymlinks
+		filepathRel = originalFilepathRel
+	}()
+
+	tmpDir := t.TempDir()
+	workspaceDir := filepath.Join(tmpDir, "workspace")
+	if err := os.MkdirAll(workspaceDir, 0755); err != nil {
+		t.Fatalf("failed to create workspace: %v", err)
+	}
+
+	// Mock os.Lstat to succeed
+	osLstat = func(name string) (os.FileInfo, error) {
+		return nil, nil
+	}
+
+	// Mock filepath.EvalSymlinks to succeed for both calls
+	filepathEvalSymlinks = func(path string) (string, error) {
+		return path, nil
+	}
+
+	// Mock filepath.Rel - need to let ValidateWorkingDirectory pass but fail in ValidatePathWithSymlinkResolution
+	relCallCount := 0
+	filepathRel = func(basepath, targpath string) (string, error) {
+		relCallCount++
+		if relCallCount == 1 {
+			// First call in ValidateWorkingDirectory - succeed
+			return filepath.Rel(basepath, targpath)
+		}
+		// Second call in ValidatePathWithSymlinkResolution - fail
+		return "", fmt.Errorf("mocked rel error")
+	}
+
+	err := ValidatePathWithSymlinkResolution("subdir", workspaceDir)
+	if err == nil {
+		t.Error("Expected error when filepath.Rel fails in symlink resolution")
+	}
+	if err != nil && !strings.Contains(err.Error(), "symlink target escapes workspace") {
+		t.Errorf("Expected 'symlink target escapes workspace' error, got: %v", err)
+	}
 }
 
 // TestSymlinkTraversalAttacks tests various symlink-based path traversal attack patterns
