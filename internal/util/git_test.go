@@ -283,3 +283,172 @@ func TestFindGitRoot_MultipleDirectories(t *testing.T) {
 		}
 	}
 }
+
+// TestGetGitRepoInfo tests the unified GetGitRepoInfo function
+func TestGetGitRepoInfo(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("returns all info for valid repository", func(t *testing.T) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+
+		repoRoot := findTestRepoRoot(t, cwd)
+
+		info, err := GetGitRepoInfo(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+
+		// Verify Root
+		if info.Root != repoRoot {
+			t.Errorf("expected Root=%s, got %s", repoRoot, info.Root)
+		}
+
+		// Verify HeadSHA is 40 hex characters
+		if len(info.HeadSHA) != 40 {
+			t.Errorf("expected 40 char SHA, got %d chars: %s", len(info.HeadSHA), info.HeadSHA)
+		}
+
+		// Verify HeadRef starts with refs/ or is empty (detached HEAD)
+		if info.HeadRef != "" && !strings.HasPrefix(info.HeadRef, "refs/") {
+			t.Errorf("expected HeadRef to be empty or start with refs/, got: %s", info.HeadRef)
+		}
+	})
+
+	t.Run("returns same values as individual functions", func(t *testing.T) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+
+		repoRoot := findTestRepoRoot(t, cwd)
+
+		// Get info via unified function
+		info, err := GetGitRepoInfo(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("GetGitRepoInfo error: %v", err)
+		}
+
+		// Get info via individual functions
+		root, err := FindGitRoot(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("FindGitRoot error: %v", err)
+		}
+		sha, err := GitHeadSHA(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("GitHeadSHA error: %v", err)
+		}
+		ref, err := GitHeadRef(ctx, repoRoot)
+		if err != nil {
+			t.Fatalf("GitHeadRef error: %v", err)
+		}
+
+		// Compare results
+		if info.Root != root {
+			t.Errorf("Root mismatch: GetGitRepoInfo=%s, FindGitRoot=%s", info.Root, root)
+		}
+		if info.HeadSHA != sha {
+			t.Errorf("HeadSHA mismatch: GetGitRepoInfo=%s, GitHeadSHA=%s", info.HeadSHA, sha)
+		}
+		if info.HeadRef != ref {
+			t.Errorf("HeadRef mismatch: GetGitRepoInfo=%s, GitHeadRef=%s", info.HeadRef, ref)
+		}
+	})
+
+	t.Run("works from subdirectory", func(t *testing.T) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("failed to get cwd: %v", err)
+		}
+
+		repoRoot := findTestRepoRoot(t, cwd)
+		subDir := filepath.Join(repoRoot, "internal", "util")
+
+		info, err := GetGitRepoInfo(ctx, subDir)
+		if err != nil {
+			t.Fatalf("expected no error, got: %v", err)
+		}
+
+		if info.Root != repoRoot {
+			t.Errorf("expected Root=%s, got %s", repoRoot, info.Root)
+		}
+	})
+
+	t.Run("returns error for non-git directory", func(t *testing.T) {
+		_, err := GetGitRepoInfo(ctx, "/tmp")
+		if err == nil {
+			t.Error("expected error for non-git directory, got nil")
+		}
+	})
+}
+
+// TestGetGitRepoInfo_DetachedHead tests GetGitRepoInfo with detached HEAD
+func TestGetGitRepoInfo_DetachedHead(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	ctx := context.Background()
+
+	// Initialize a new git repository
+	cmd := exec.CommandContext(ctx, "git", "init")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to init git repo: %v", err)
+	}
+
+	// Configure git user for the commit
+	cmd = exec.CommandContext(ctx, "git", "config", "user.email", "test@test.com")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to config git: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, "git", "config", "user.name", "Test")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to config git: %v", err)
+	}
+
+	// Create a file and commit it
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to create test file: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, "git", "add", ".")
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to git add: %v", err)
+	}
+	cmd = exec.CommandContext(ctx, "git", "commit", "--no-gpg-sign", "-m", "initial")
+	cmd.Dir = tmpDir
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("failed to git commit: %v, output: %s", err, output)
+	}
+
+	// Get the commit SHA
+	info, err := GetGitRepoInfo(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("failed to get git info: %v", err)
+	}
+
+	// Detach HEAD by checking out the commit SHA directly
+	cmd = exec.CommandContext(ctx, "git", "checkout", info.HeadSHA)
+	cmd.Dir = tmpDir
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to checkout detached HEAD: %v", err)
+	}
+
+	// Now GetGitRepoInfo should return empty HeadRef (detached HEAD)
+	info, err = GetGitRepoInfo(ctx, tmpDir)
+	if err != nil {
+		t.Errorf("GetGitRepoInfo() error = %v; expected no error for detached HEAD", err)
+	}
+	if info.HeadRef != "" {
+		t.Errorf("GetGitRepoInfo().HeadRef = %q; expected empty string for detached HEAD", info.HeadRef)
+	}
+	if info.HeadSHA == "" {
+		t.Error("GetGitRepoInfo().HeadSHA should not be empty for detached HEAD")
+	}
+}
