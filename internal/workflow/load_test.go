@@ -775,14 +775,13 @@ func TestLoadWorkflowFile_YAMLUnmarshalError(t *testing.T) {
 	}
 }
 
-// TestExtractJobOrderFromNode_SequenceRoot tests extractJobOrderFromNode with sequence at root
-// This specifically covers the doc.Kind != yaml.MappingNode branch (line 56-58)
-func TestExtractJobOrderFromNode_SequenceRoot(t *testing.T) {
+// TestUnmarshalYAML_SequenceRoot tests UnmarshalYAML with sequence at root
+// This specifically covers the node.Kind != yaml.MappingNode branch
+func TestUnmarshalYAML_SequenceRoot(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 
 	// Create YAML with sequence at root - this will parse but decode will fail
-	// However, we need to test the extractJobOrderFromNode function path
 	yamlContent := `---
 - item1
 - item2`
@@ -792,12 +791,9 @@ func TestExtractJobOrderFromNode_SequenceRoot(t *testing.T) {
 	}
 
 	_, err := LoadWorkflowFile(workflowPath)
-	// This should error or return empty JobOrder
-	if err != nil {
-		// Error is expected since root is not a mapping
-		if !strings.Contains(err.Error(), "decode workflow") {
-			t.Logf("Got error: %v", err)
-		}
+	// This should error since root is not a mapping
+	if err == nil {
+		t.Error("LoadWorkflowFile() expected error for sequence root")
 	}
 }
 
@@ -955,147 +951,101 @@ func TestDiscoverWorkflows_SymlinkToDirectory(t *testing.T) {
 	})
 }
 
-// TestExtractJobOrderFromNode_DirectCall tests extractJobOrderFromNode directly
-// to cover the doc.Kind != yaml.MappingNode branch
-func TestExtractJobOrderFromNode_DirectCall(t *testing.T) {
+// TestUnmarshalYAML_DirectCall tests WorkflowFile.UnmarshalYAML with various node types
+func TestUnmarshalYAML_DirectCall(t *testing.T) {
 	t.Parallel()
 
 	// Test with sequence node (not mapping)
-	t.Run("sequence node returns nil", func(t *testing.T) {
-		var root yaml.Node
+	t.Run("sequence node returns error", func(t *testing.T) {
 		yamlContent := `- item1
 - item2`
-		if err := yaml.Unmarshal([]byte(yamlContent), &root); err != nil {
-			t.Fatalf("failed to unmarshal YAML: %v", err)
-		}
-
-		result := extractJobOrderFromNode(&root)
-		if result != nil {
-			t.Errorf("extractJobOrderFromNode() = %v, want nil for sequence node", result)
+		var wf WorkflowFile
+		err := yaml.Unmarshal([]byte(yamlContent), &wf)
+		if err == nil {
+			t.Error("UnmarshalYAML should return error for sequence node")
 		}
 	})
 
 	// Test with scalar node
-	t.Run("scalar node returns nil", func(t *testing.T) {
-		var root yaml.Node
+	t.Run("scalar node returns error", func(t *testing.T) {
 		yamlContent := `just a string`
-		if err := yaml.Unmarshal([]byte(yamlContent), &root); err != nil {
-			t.Fatalf("failed to unmarshal YAML: %v", err)
-		}
-
-		result := extractJobOrderFromNode(&root)
-		if result != nil {
-			t.Errorf("extractJobOrderFromNode() = %v, want nil for scalar node", result)
+		var wf WorkflowFile
+		err := yaml.Unmarshal([]byte(yamlContent), &wf)
+		if err == nil {
+			t.Error("UnmarshalYAML should return error for scalar node")
 		}
 	})
 
-	// Test with empty node
-	t.Run("empty node returns nil", func(t *testing.T) {
-		root := &yaml.Node{}
-		result := extractJobOrderFromNode(root)
-		if result != nil {
-			t.Errorf("extractJobOrderFromNode() = %v, want nil for empty node", result)
+	// Test with empty document
+	t.Run("empty document returns empty workflow", func(t *testing.T) {
+		yamlContent := ``
+		var wf WorkflowFile
+		err := yaml.Unmarshal([]byte(yamlContent), &wf)
+		if err != nil {
+			t.Errorf("UnmarshalYAML error = %v for empty document", err)
+		}
+		if wf.Name != "" || len(wf.Jobs) != 0 || len(wf.JobOrder) != 0 {
+			t.Errorf("UnmarshalYAML should return empty workflow for empty document")
 		}
 	})
 
-	// Test with nil key node in doc.Content (line 65)
-	t.Run("nil key node in content is skipped", func(t *testing.T) {
-		root := &yaml.Node{
-			Kind: yaml.DocumentNode,
-			Content: []*yaml.Node{
-				{
-					Kind: yaml.MappingNode,
-					Content: []*yaml.Node{
-						nil, // nil key node
-						{Kind: yaml.ScalarNode, Value: "value"},
-						{Kind: yaml.ScalarNode, Value: "jobs"},
-						{
-							Kind: yaml.MappingNode,
-							Content: []*yaml.Node{
-								{Kind: yaml.ScalarNode, Value: "job1"},
-								{Kind: yaml.MappingNode},
-							},
-						},
-					},
-				},
-			},
+	// Test valid workflow with jobs
+	t.Run("valid workflow extracts job order correctly", func(t *testing.T) {
+		yamlContent := `name: Test
+jobs:
+  first:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo first
+  second:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo second`
+		var wf WorkflowFile
+		err := yaml.Unmarshal([]byte(yamlContent), &wf)
+		if err != nil {
+			t.Fatalf("UnmarshalYAML error = %v", err)
 		}
-		result := extractJobOrderFromNode(root)
-		// Should skip the nil key and find "jobs"
-		if len(result) != 1 || result[0] != "job1" {
-			t.Errorf("extractJobOrderFromNode() = %v, want [job1]", result)
+		if wf.Name != "Test" {
+			t.Errorf("Name = %q, want %q", wf.Name, "Test")
+		}
+		if len(wf.JobOrder) != 2 || wf.JobOrder[0] != "first" || wf.JobOrder[1] != "second" {
+			t.Errorf("JobOrder = %v, want [first, second]", wf.JobOrder)
 		}
 	})
 
-	// Test with nil value node in doc.Content (line 65)
-	t.Run("nil value node in content is skipped", func(t *testing.T) {
-		root := &yaml.Node{
-			Kind: yaml.DocumentNode,
-			Content: []*yaml.Node{
-				{
-					Kind: yaml.MappingNode,
-					Content: []*yaml.Node{
-						{Kind: yaml.ScalarNode, Value: "name"},
-						nil, // nil value node
-						{Kind: yaml.ScalarNode, Value: "jobs"},
-						{
-							Kind: yaml.MappingNode,
-							Content: []*yaml.Node{
-								{Kind: yaml.ScalarNode, Value: "job1"},
-								{Kind: yaml.MappingNode},
-							},
-						},
-					},
-				},
-			},
+	// Test workflow with env
+	t.Run("workflow with env extracts correctly", func(t *testing.T) {
+		yamlContent := `name: Test
+env:
+  KEY1: value1
+  KEY2: value2`
+		var wf WorkflowFile
+		err := yaml.Unmarshal([]byte(yamlContent), &wf)
+		if err != nil {
+			t.Fatalf("UnmarshalYAML error = %v", err)
 		}
-		result := extractJobOrderFromNode(root)
-		// Should skip the nil value and find "jobs"
-		if len(result) != 1 || result[0] != "job1" {
-			t.Errorf("extractJobOrderFromNode() = %v, want [job1]", result)
+		if wf.Env["KEY1"] != "value1" || wf.Env["KEY2"] != "value2" {
+			t.Errorf("Env = %v, want {KEY1:value1, KEY2:value2}", wf.Env)
 		}
 	})
 
-	// Test with nil job key node in jobs.Content (line 74)
-	t.Run("nil job key node is skipped", func(t *testing.T) {
-		root := &yaml.Node{
-			Kind: yaml.DocumentNode,
-			Content: []*yaml.Node{
-				{
-					Kind: yaml.MappingNode,
-					Content: []*yaml.Node{
-						{Kind: yaml.ScalarNode, Value: "jobs"},
-						{
-							Kind: yaml.MappingNode,
-							Content: []*yaml.Node{
-								nil, // nil job key node
-								{Kind: yaml.MappingNode},
-								{Kind: yaml.ScalarNode, Value: "job2"},
-								{Kind: yaml.MappingNode},
-							},
-						},
-					},
-				},
-			},
+	// Test document node wrapper handling
+	t.Run("document node wrapper is handled", func(t *testing.T) {
+		yamlContent := `---
+name: DocTest
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo test`
+		var wf WorkflowFile
+		err := yaml.Unmarshal([]byte(yamlContent), &wf)
+		if err != nil {
+			t.Fatalf("UnmarshalYAML error = %v", err)
 		}
-		result := extractJobOrderFromNode(root)
-		// Should skip the nil job key and find "job2"
-		if len(result) != 1 || result[0] != "job2" {
-			t.Errorf("extractJobOrderFromNode() = %v, want [job2]", result)
-		}
-	})
-
-	// Test with nil doc node (line 56)
-	t.Run("nil doc node returns nil", func(t *testing.T) {
-		root := &yaml.Node{
-			Kind: yaml.DocumentNode,
-			Content: []*yaml.Node{
-				nil, // nil doc node
-			},
-		}
-		result := extractJobOrderFromNode(root)
-		if result != nil {
-			t.Errorf("extractJobOrderFromNode() = %v, want nil for nil doc node", result)
+		if wf.Name != "DocTest" {
+			t.Errorf("Name = %q, want %q", wf.Name, "DocTest")
 		}
 	})
 }
