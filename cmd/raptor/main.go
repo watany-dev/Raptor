@@ -17,10 +17,15 @@ var (
 )
 
 func main() {
+	mainCore(os.Args[1:], os.Exit)
+}
+
+// mainCore contains the main logic and is testable
+func mainCore(args []string, exit func(int)) {
 	logger.Init()
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(args); err != nil {
 		slog.Error("execution failed", "error", err)
-		os.Exit(1)
+		exit(1)
 	}
 }
 
